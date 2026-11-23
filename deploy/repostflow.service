@@ -1,0 +1,24 @@
+[Unit]
+Description=RepostFlow - YouTube Multi-Channel Automation Platform
+After=network.target
+
+[Service]
+Type=simple
+User=repostflow
+Group=repostflow
+WorkingDirectory=/opt/repostflow
+EnvironmentFile=/opt/repostflow/.env
+ExecStart=/opt/repostflow/venv/bin/gunicorn --workers 4 --threads 4 --worker-class gthread --bind 127.0.0.1:5000 wsgi:app
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/repostflow/logs/gunicorn_access.log
+StandardError=append:/opt/repostflow/logs/gunicorn_error.log
+
+# Security Sandboxing Options
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
