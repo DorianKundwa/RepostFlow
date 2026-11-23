@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app import create_app
 from app.services.folder_monitor import folder_monitor
+from app.services.scheduler_service import scheduler_service
 import atexit
 
 app = create_app()
@@ -26,6 +27,10 @@ if __name__ == "__main__":
     # Start background folder monitor
     folder_monitor.start(app)
     atexit.register(folder_monitor.stop)
+
+    # Start background task scheduler (APScheduler)
+    scheduler_service.start(app)
+    atexit.register(scheduler_service.stop)
 
     # Only bind to localhost in development.
     # Set PORT environment variable to override.
