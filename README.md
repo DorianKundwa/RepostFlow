@@ -28,7 +28,7 @@ RepostFlow is a self-hosted YouTube video distribution and automation platform. 
 
 ## Features
 
-**Current (Stages 1 through 7 Complete)**
+**Current (Stages 1 through 8 Complete)**
 - Project structure and Flask application factory
 - Full database schema (11 tables: Users, Accounts, Channels, Folders, Videos, Rules, Destinations, UploadJobs, History, Settings, Notifications)
 - Local user authentication (registration with admin grant, login, logout)
@@ -70,12 +70,17 @@ RepostFlow is a self-hosted YouTube video distribution and automation platform. 
 - Interactive Resumable Upload Queue dashboard with real-time status auto-polling
 - Upload job controls: Instant execution, retry, pause, resume, cancel, and "Retry All Failed"
 - Immutable Publishing History audit log with channel filtering and direct YouTube links
+- Background task automation engine via APScheduler (`scheduler_service.py`)
+- Automated YouTube source channel polling worker running at configured intervals
+- Resumable upload queue worker dispatching pending jobs while enforcing `max_concurrent_uploads`
+- Watched folder maintenance sweep periodically verifying directory stability
+- Dynamic job rescheduling upon application settings changes without process restarts
+- In-dashboard scheduler controls (Pause/Resume daemon, On-demand "Run Now" dispatch, schedule table)
 - Dark SaaS-style responsive dashboard with Bootstrap 5
-- Comprehensive test suite (109 tests, all passing)
+- Comprehensive test suite (119 tests, all passing)
 
 **Planned (Next Stages)**
-- Background worker scheduling via APScheduler (Stage 11)
-- Security hardening & production deployment guides (Stage 12-13)
+- Security hardening, production deployment guides & backup workflows (Stage 9)
 
 ---
 
@@ -360,8 +365,8 @@ copy instance\repostflow.db.backup instance\repostflow.db
 | 5  | YouTube source monitoring (PlaylistItems & Videos API, auto-match & Awaiting File) | ✅ Complete |
 | 6  | Automation rule engine (Loop prevention, metadata transformations & UploadJob queuing) | ✅ Complete |
 | 7  | Resumable YouTube upload engine, upload queue UI, and publishing history | ✅ Complete |
-| 8  | Background worker scheduling via APScheduler | Planned |
-| 9  | Security hardening, production deployment & backup workflows | Planned |
+| 8  | Background task scheduling via APScheduler & automated workers | ✅ Complete |
+| 9  | Security hardening, production deployment guides & backup workflows | Planned |
 
 ---
 
@@ -372,4 +377,4 @@ venv\Scripts\activate
 pytest tests\ -v
 ```
 
-Expected output: **109 passed**.
+Expected output: **119 passed**.
