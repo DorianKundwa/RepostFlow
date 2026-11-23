@@ -25,6 +25,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -181,18 +182,65 @@ def upload_thumbnail(video_id: int):
 @videos_bp.route("/<int:video_id>/match-file", methods=["POST"])
 @login_required
 def match_file(video_id: int):
+    uploaded_file = request.files.get("video_file")
     file_path = request.form.get("local_file_path", "").strip()
-    if not file_path:
-        flash("Please enter a valid local file path.", "warning")
+
+    target_path = None
+
+    if uploaded_file and uploaded_file.filename:
+        safe_name = secure_filename(uploaded_file.filename)
+        dest_dir = Path(current_app.config["VIDEOS_DIR"])
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        unique_name = f"matched_{video_id}_{safe_name}"
+        save_target = dest_dir / unique_name
+        uploaded_file.save(str(save_target))
+        target_path = str(save_target)
+    elif file_path:
+        target_path = file_path
+    else:
+        flash("Please select a video file or enter a valid local file path.", "warning")
         return redirect(url_for("videos.detail", video_id=video_id))
 
-    ok, err = attach_local_media_to_video(video_id, file_path)
+    ok, err = attach_local_media_to_video(video_id, target_path)
     if ok:
-        flash("Local media file verified and linked successfully! Video is now Ready.", "success")
+        flash("Local media file verified and linked successfully! Video is now Ready for reposting.", "success")
     else:
         flash(f"Failed to link media file: {err}", "danger")
 
     return redirect(url_for("videos.detail", video_id=video_id))
+
+
+@videos_bp.route("/browse-file-dialog", methods=["POST"])
+@login_required
+def browse_file_dialog():
+    """
+    Launch native Windows file chooser dialog on the host system
+    and return the chosen absolute file path as JSON.
+    """
+    import subprocess
+    import sys
+
+    if sys.platform != "win32":
+        return jsonify({"success": False, "error": "Native desktop dialog only available on Windows."}), 400
+
+    cmd = (
+        'powershell -NoProfile -ExecutionPolicy Bypass -Command "'
+        '[System.Reflection.Assembly]::LoadWithPartialName(\'System.Windows.Forms\') | Out-Null; '
+        '$d = New-Object System.Windows.Forms.OpenFileDialog; '
+        '$d.Filter = \'Video Files (*.mp4;*.mov;*.mkv;*.webm;*.avi)|*.mp4;*.mov;*.mkv;*.webm;*.avi|All Files (*.*)|*.*\'; '
+        '$d.Title = \'Select Original Master Video File\'; '
+        'if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }"'
+    )
+    try:
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
+        selected_path = proc.stdout.strip()
+        if selected_path:
+            return jsonify({"success": True, "path": selected_path})
+        return jsonify({"success": False, "error": "No file selected."})
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "error": "File dialog timed out."})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)})
 
 
 @videos_bp.route("/<int:video_id>/delete", methods=["POST"])

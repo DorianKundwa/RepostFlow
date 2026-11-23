@@ -375,6 +375,40 @@ class TestVideoRoutes:
             assert resp.status_code == 200
             assert b"Local media file verified and linked successfully" in resp.data
 
+    def test_video_match_file_upload_route(self, auth_client, app, db):
+        with app.app_context():
+            awaiting_v = Video(
+                source_type=SourceType.YOUTUBE,
+                title="Needs File Upload",
+                status=VideoStatus.AWAITING_FILE,
+                detected_at=datetime.now(timezone.utc),
+            )
+            _db.session.add(awaiting_v)
+            _db.session.commit()
+            vid_id = awaiting_v.id
+
+        with patch("app.services.video_service.validate_video_file", return_value=(True, None, {"duration_seconds": 60, "width": 1280, "height": 720, "fps": 30, "codec": "h264", "file_size_bytes": 512})), \
+             patch("app.services.video_service.generate_video_thumbnail", return_value=("storage/thumbnails/t.jpg", None)):
+
+            fake_file = (io.BytesIO(b"\x00" * 512), "picked_master.mp4")
+            resp = auth_client.post(
+                f"/videos/{vid_id}/match-file",
+                data={"video_file": fake_file},
+                content_type="multipart/form-data",
+                follow_redirects=True,
+            )
+            assert resp.status_code == 200
+            assert b"Local media file verified and linked successfully" in resp.data
+
+    def test_browse_file_dialog_route(self, auth_client):
+        with patch("subprocess.run") as mock_sub:
+            mock_sub.return_value.stdout = "C:\\Videos\\sample.mp4\n"
+            resp = auth_client.post("/videos/browse-file-dialog")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["success"] is True
+            assert "sample.mp4" in data["path"]
+
     def test_video_thumbnail_upload_route(self, auth_client, app, db):
         with app.app_context():
             v = Video.query.first()
