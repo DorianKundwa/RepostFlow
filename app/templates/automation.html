@@ -218,9 +218,17 @@
 
           <!-- Destination Channels Checkboxes -->
           <div class="mb-4">
-            <label class="form-label d-flex justify-content-between align-items-center">
+            <label class="form-label d-flex justify-content-between align-items-center mb-1">
               <span>Destination Channels (Publish targets)</span>
-              <span class="text-muted small">Select one or more</span>
+              <div>
+                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none rf-link-red me-2" id="selectAllDestBtn">
+                  <i class="bi bi-check-all me-1"></i>Select All
+                </button>
+                <span class="text-muted small">|</span>
+                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none text-muted ms-2" id="deselectAllDestBtn">
+                  Deselect All
+                </button>
+              </div>
             </label>
             <div class="border border-secondary-subtle rounded p-3 bg-dark-subtle" style="max-height: 180px; overflow-y: auto;">
               {% if dest_channels %}
@@ -293,22 +301,29 @@
 
                   <!-- Copy toggles -->
                   <div class="col-12">
-                    <label class="form-label small d-block">Inheritance Toggles</label>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label class="form-label small mb-0">Inheritance Toggles</label>
+                      <div class="small">
+                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none rf-link-red me-2" id="selectAllTogglesBtn">Select All</button>
+                        <span class="text-muted">|</span>
+                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none text-muted ms-2" id="deselectAllTogglesBtn">Deselect All</button>
+                      </div>
+                    </div>
                     <div class="d-flex flex-wrap gap-3">
                       <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="copy_title" value="1" id="cpTitle" checked />
+                        <input class="form-check-input toggle-check" type="checkbox" name="copy_title" value="1" id="cpTitle" checked />
                         <label class="form-check-label small" for="cpTitle">Copy Title</label>
                       </div>
                       <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="copy_description" value="1" id="cpDesc" checked />
+                        <input class="form-check-input toggle-check" type="checkbox" name="copy_description" value="1" id="cpDesc" checked />
                         <label class="form-check-label small" for="cpDesc">Copy Description</label>
                       </div>
                       <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="copy_tags" value="1" id="cpTags" checked />
+                        <input class="form-check-input toggle-check" type="checkbox" name="copy_tags" value="1" id="cpTags" checked />
                         <label class="form-check-label small" for="cpTags">Copy Tags</label>
                       </div>
                       <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="copy_thumbnail" value="1" id="cpThumb" checked />
+                        <input class="form-check-input toggle-check" type="checkbox" name="copy_thumbnail" value="1" id="cpThumb" checked />
                         <label class="form-check-label small" for="cpThumb">Copy Thumbnail</label>
                       </div>
                     </div>
@@ -352,5 +367,29 @@ function toggleSourceSelectors() {
     folderCont.classList.remove('d-none');
   }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  const selectAllDestBtn = document.getElementById('selectAllDestBtn');
+  const deselectAllDestBtn = document.getElementById('deselectAllDestBtn');
+  if (selectAllDestBtn && deselectAllDestBtn) {
+    selectAllDestBtn.addEventListener('click', function() {
+      document.querySelectorAll('.dest-check').forEach(function(c) { c.checked = true; });
+    });
+    deselectAllDestBtn.addEventListener('click', function() {
+      document.querySelectorAll('.dest-check').forEach(function(c) { c.checked = false; });
+    });
+  }
+
+  const selectAllTogglesBtn = document.getElementById('selectAllTogglesBtn');
+  const deselectAllTogglesBtn = document.getElementById('deselectAllTogglesBtn');
+  if (selectAllTogglesBtn && deselectAllTogglesBtn) {
+    selectAllTogglesBtn.addEventListener('click', function() {
+      document.querySelectorAll('.toggle-check').forEach(function(c) { c.checked = true; });
+    });
+    deselectAllTogglesBtn.addEventListener('click', function() {
+      document.querySelectorAll('.toggle-check').forEach(function(c) { c.checked = false; });
+    });
+  }
+});
 </script>
 {% endblock %}

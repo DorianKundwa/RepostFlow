@@ -446,3 +446,23 @@ class TestVideoRoutes:
 
         with app.app_context():
             assert _db.session.get(Video, vid_id) is None
+
+    def test_video_bulk_delete_route(self, auth_client, app, db):
+        with app.app_context():
+            v1 = Video(source_type=SourceType.LOCAL_FOLDER, title="Bulk 1", status=VideoStatus.READY)
+            v2 = Video(source_type=SourceType.LOCAL_FOLDER, title="Bulk 2", status=VideoStatus.READY)
+            _db.session.add_all([v1, v2])
+            _db.session.commit()
+            id1, id2 = v1.id, v2.id
+
+        resp = auth_client.post(
+            "/videos/bulk-delete",
+            data={"video_ids": [str(id1), str(id2)]},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert b"Successfully deleted 2 video(s)" in resp.data
+
+        with app.app_context():
+            assert _db.session.get(Video, id1) is None
+            assert _db.session.get(Video, id2) is None

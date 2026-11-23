@@ -255,6 +255,29 @@ def delete(video_id: int):
     return redirect(url_for("videos.index"))
 
 
+@videos_bp.route("/bulk-delete", methods=["POST"])
+@login_required
+def bulk_delete():
+    video_ids = request.form.getlist("video_ids")
+    if not video_ids:
+        flash("No videos were selected for deletion.", "warning")
+        return redirect(url_for("videos.index"))
+
+    delete_local = request.form.get("delete_local_file") == "1"
+    count = 0
+    for vid_str in video_ids:
+        try:
+            vid = int(vid_str)
+            ok, _ = delete_video(vid, remove_local_file=delete_local)
+            if ok:
+                count += 1
+        except Exception:
+            pass
+
+    flash(f"Successfully deleted {count} video(s) from your library.", "success")
+    return redirect(url_for("videos.index"))
+
+
 @videos_bp.route("/import-file", methods=["POST"])
 @login_required
 def import_file():

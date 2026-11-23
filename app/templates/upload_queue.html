@@ -103,25 +103,54 @@
   </div>
   <div class="rf-panel-body p-0">
     {% if jobs %}
-    <div class="table-responsive">
-      <table class="table rf-table mb-0 align-middle">
-        <thead>
-          <tr>
-            <th style="width: 50px;">#</th>
-            <th>Video Title</th>
-            <th>Destination Channel</th>
-            <th>Privacy</th>
-            <th style="min-width: 140px;">Upload Progress</th>
-            <th>Status</th>
-            <th>Retries</th>
-            <th>Created</th>
-            <th class="text-end">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="uploadJobsTbody">
-          {% for j in jobs %}
-          <tr id="job-row-{{ j.id }}" data-job-id="{{ j.id }}" data-status="{{ j.status.value }}">
-            <!-- Job ID -->
+    <form id="bulkJobForm" method="POST" action="{{ url_for('uploads.bulk_action') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+      <input type="hidden" name="action" id="bulkJobActionInput" value="" />
+      <div id="bulkJobToolbar" class="d-none bg-dark-subtle p-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-primary" id="selectedJobCount">0 selected</span>
+          <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none rf-link-red" id="btnSelectAllJobs">Select All</button>
+          <span class="text-muted small">|</span>
+          <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none text-muted" id="btnDeselectAllJobs">Deselect All</button>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-sm btn-outline-warning" onclick="submitBulkJobAction('retry')">
+            <i class="bi bi-arrow-repeat me-1"></i>Retry Selected
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" onclick="submitBulkJobAction('pause')">
+            <i class="bi bi-pause-fill me-1"></i>Pause Selected
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="submitBulkJobAction('cancel')">
+            <i class="bi bi-x-circle me-1"></i>Cancel Selected
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table rf-table mb-0 align-middle">
+          <thead>
+            <tr>
+              <th style="width: 36px;">
+                <input type="checkbox" id="selectAllJobsHeader" class="form-check-input" title="Select / Deselect All Jobs" />
+              </th>
+              <th style="width: 50px;">#</th>
+              <th>Video Title</th>
+              <th>Destination Channel</th>
+              <th>Privacy</th>
+              <th style="min-width: 140px;">Upload Progress</th>
+              <th>Status</th>
+              <th>Retries</th>
+              <th>Created</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="uploadJobsTbody">
+            {% for j in jobs %}
+            <tr id="job-row-{{ j.id }}" data-job-id="{{ j.id }}" data-status="{{ j.status.value }}">
+              <td>
+                <input type="checkbox" name="job_ids" value="{{ j.id }}" class="form-check-input job-row-check" />
+              </td>
+              <!-- Job ID -->
             <td class="text-muted small">#{{ j.id }}</td>
 
             <!-- Video Info -->
@@ -284,6 +313,7 @@
         </tbody>
       </table>
     </div>
+    </form>
     {% else %}
     <div class="rf-empty-state py-5 text-center">
       <i class="bi bi-cloud-upload fs-1 mb-3 text-rf-red"></i>
@@ -307,6 +337,65 @@
 
 {% block extra_js %}
 <script>
+function submitBulkJobAction(action) {
+  const checked = document.querySelectorAll('.job-row-check:checked');
+  if (checked.length === 0) {
+    alert('Please select at least one job first.');
+    return;
+  }
+  document.getElementById('bulkJobActionInput').value = action;
+  document.getElementById('bulkJobForm').submit();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const headerCheck = document.getElementById('selectAllJobsHeader');
+  const rowChecks = document.querySelectorAll('.job-row-check');
+  const toolbar = document.getElementById('bulkJobToolbar');
+  const countBadge = document.getElementById('selectedJobCount');
+  const btnSelectAll = document.getElementById('btnSelectAllJobs');
+  const btnDeselectAll = document.getElementById('btnDeselectAllJobs');
+
+  function updateToolbar() {
+    const checked = document.querySelectorAll('.job-row-check:checked');
+    const total = rowChecks.length;
+    if (countBadge) countBadge.textContent = checked.length + ' selected';
+
+    if (checked.length > 0) {
+      toolbar.classList.remove('d-none');
+    } else {
+      toolbar.classList.add('d-none');
+    }
+
+    if (headerCheck) {
+      headerCheck.checked = (total > 0 && checked.length === total);
+      headerCheck.indeterminate = (checked.length > 0 && checked.length < total);
+    }
+  }
+
+  if (headerCheck) {
+    headerCheck.addEventListener('change', function() {
+      rowChecks.forEach(c => c.checked = headerCheck.checked);
+      updateToolbar();
+    });
+  }
+
+  if (btnSelectAll) {
+    btnSelectAll.addEventListener('click', function() {
+      rowChecks.forEach(c => c.checked = true);
+      updateToolbar();
+    });
+  }
+
+  if (btnDeselectAll) {
+    btnDeselectAll.addEventListener('click', function() {
+      rowChecks.forEach(c => c.checked = false);
+      updateToolbar();
+    });
+  }
+
+  rowChecks.forEach(c => c.addEventListener('change', updateToolbar));
+});
+
 // Auto-poll active upload jobs every 4 seconds
 (function() {
   const hasActiveJobs = document.querySelector('[data-status="uploading"], [data-status="pending"]');

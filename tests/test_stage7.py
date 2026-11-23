@@ -574,6 +574,36 @@ class TestUploadRoutes:
         assert b"Reset" in resp.data
         assert b"failed jobs back to PENDING" in resp.data
 
+    def test_post_bulk_action_route(self, app, auth_client, fixture_data):
+        with app.app_context():
+            job1 = UploadJob(
+                video_id=fixture_data["video_id"],
+                destination_channel_id=fixture_data["channel_id"],
+                status=UploadStatus.PENDING,
+                idempotency_key="bulk_act_1",
+            )
+            job2 = UploadJob(
+                video_id=fixture_data["video_id"],
+                destination_channel_id=fixture_data["channel_id"],
+                status=UploadStatus.PENDING,
+                idempotency_key="bulk_act_2",
+            )
+            _db.session.add_all([job1, job2])
+            _db.session.commit()
+            j1_id, j2_id = job1.id, job2.id
+
+        resp = auth_client.post(
+            "/uploads/bulk-action",
+            data={"action": "pause", "job_ids": [str(j1_id), str(j2_id)]},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert b"Updated 2 job(s)" in resp.data
+
+        with app.app_context():
+            assert _db.session.get(UploadJob, j1_id).status == UploadStatus.PAUSED
+            assert _db.session.get(UploadJob, j2_id).status == UploadStatus.PAUSED
+
     def test_api_status_json(self, app, auth_client, fixture_data):
         with app.app_context():
             job = UploadJob(

@@ -123,25 +123,47 @@
   </div>
   <div class="rf-panel-body p-0">
     {% if videos %}
-    <div class="table-responsive">
-      <table class="table rf-table mb-0 align-middle">
-        <thead>
-          <tr>
-            <th style="width:140px">Preview</th>
-            <th>Title &amp; Source</th>
-            <th>Resolution &amp; Codec</th>
-            <th>Duration</th>
-            <th>Status</th>
-            <th>Privacy</th>
-            <th>Detected</th>
-            <th class="text-end">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for v in videos %}
-          <tr>
-            <!-- Thumbnail -->
-            <td>
+    <form id="bulkVideoForm" method="POST" action="{{ url_for('videos.bulk_delete') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <div id="bulkVideoToolbar" class="d-none bg-dark-subtle p-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-primary" id="selectedVideoCount">0 selected</span>
+          <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none rf-link-red" id="btnSelectAllVideos">Select All</button>
+          <span class="text-muted small">|</span>
+          <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none text-muted" id="btnDeselectAllVideos">Deselect All</button>
+        </div>
+        <div>
+          <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#bulkDeleteModal">
+            <i class="bi bi-trash me-1"></i>Delete Selected
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table rf-table mb-0 align-middle">
+          <thead>
+            <tr>
+              <th style="width:36px">
+                <input type="checkbox" id="selectAllVideosHeader" class="form-check-input" title="Select / Deselect All Videos" />
+              </th>
+              <th style="width:140px">Preview</th>
+              <th>Title &amp; Source</th>
+              <th>Resolution &amp; Codec</th>
+              <th>Duration</th>
+              <th>Status</th>
+              <th>Privacy</th>
+              <th>Detected</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in videos %}
+            <tr>
+              <td>
+                <input type="checkbox" name="video_ids" value="{{ v.id }}" class="form-check-input video-row-check" />
+              </td>
+              <!-- Thumbnail -->
+              <td>
               <a href="{{ url_for('videos.detail', video_id=v.id) }}" class="rf-video-table-thumb">
                 {% if v.local_thumbnail_path or v.thumbnail_url %}
                 <img src="{{ url_for('videos.thumbnail_preview', video_id=v.id) }}" alt="thumb" class="rounded" />
@@ -261,6 +283,7 @@
       </nav>
     </div>
     {% endif %}
+    </form>
 
     {% else %}
     <div class="rf-empty-state py-5">
@@ -299,12 +322,15 @@
           <div class="text-center my-2 text-muted">— OR —</div>
 
           <div class="mb-3">
-            <label class="form-label">Existing Absolute Local File Path</label>
+            <label class="form-label fw-semibold small">Choose or Enter Local File Path</label>
             <div class="input-group">
               <span class="input-group-text"><i class="bi bi-hdd"></i></span>
-              <input type="text" name="local_path" class="form-control" placeholder="C:\Users\admin\Videos\project_clip.mp4" />
+              <input type="text" name="local_path" id="importLocalPathInput" class="form-control" placeholder="Select or paste path (e.g. C:\Users\admin\Videos\project_clip.mp4)" />
+              <button type="button" class="btn btn-outline-secondary" id="btnBrowseImportVideo" title="Open Windows File Dialog to select file">
+                <i class="bi bi-folder2-open me-1"></i>Browse PC...
+              </button>
             </div>
-            <div class="form-text text-muted">RepostFlow reads the original file directly without duplicating storage.</div>
+            <div class="form-text text-muted small">Select any video file directly on this machine without duplicating storage.</div>
           </div>
 
           <div class="mb-3">
@@ -348,19 +374,132 @@
     </div>
   </div>
 </div>
+
+<!-- ===== Modal: Bulk Delete Videos ===== -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content rf-modal">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-trash text-danger me-2"></i>Delete Selected Videos</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete <strong id="bulkDeleteCountText">all selected videos</strong> from the library?</p>
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" name="delete_local_file" value="1" id="bulkDeleteLocalCheck" form="bulkVideoForm" />
+          <label class="form-check-label text-muted small" for="bulkDeleteLocalCheck">
+            Also delete original video files from disk (permanent)
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" form="bulkVideoForm" class="btn btn-danger">Confirm Delete Selected</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const delModal = document.getElementById('deleteVideoModal');
-if (delModal) {
-  delModal.addEventListener('show.bs.modal', function(e) {
-    const btn = e.relatedTarget;
-    const vId = btn.getAttribute('data-video-id');
-    const vTitle = btn.getAttribute('data-video-title');
-    document.getElementById('deleteVideoTitle').textContent = vTitle;
-    document.getElementById('deleteVideoForm').action = '/videos/' + vId + '/delete';
-  });
-}
+document.addEventListener('DOMContentLoaded', function() {
+  // Single delete modal
+  const delModal = document.getElementById('deleteVideoModal');
+  if (delModal) {
+    delModal.addEventListener('show.bs.modal', function(e) {
+      const btn = e.relatedTarget;
+      const vId = btn.getAttribute('data-video-id');
+      const vTitle = btn.getAttribute('data-video-title');
+      document.getElementById('deleteVideoTitle').textContent = vTitle;
+      document.getElementById('deleteVideoForm').action = '/videos/' + vId + '/delete';
+    });
+  }
+
+  // Bulk video selection & toolbar
+  const headerCheck = document.getElementById('selectAllVideosHeader');
+  const rowChecks = document.querySelectorAll('.video-row-check');
+  const toolbar = document.getElementById('bulkVideoToolbar');
+  const countBadge = document.getElementById('selectedVideoCount');
+  const countText = document.getElementById('bulkDeleteCountText');
+  const btnSelectAll = document.getElementById('btnSelectAllVideos');
+  const btnDeselectAll = document.getElementById('btnDeselectAllVideos');
+
+  function updateToolbar() {
+    const checked = document.querySelectorAll('.video-row-check:checked');
+    const total = rowChecks.length;
+    if (countBadge) countBadge.textContent = checked.length + ' selected';
+    if (countText) countText.textContent = checked.length + ' video(s)';
+
+    if (checked.length > 0) {
+      toolbar.classList.remove('d-none');
+    } else {
+      toolbar.classList.add('d-none');
+    }
+
+    if (headerCheck) {
+      headerCheck.checked = (total > 0 && checked.length === total);
+      headerCheck.indeterminate = (checked.length > 0 && checked.length < total);
+    }
+  }
+
+  if (headerCheck) {
+    headerCheck.addEventListener('change', function() {
+      rowChecks.forEach(c => c.checked = headerCheck.checked);
+      updateToolbar();
+    });
+  }
+
+  if (btnSelectAll) {
+    btnSelectAll.addEventListener('click', function() {
+      rowChecks.forEach(c => c.checked = true);
+      updateToolbar();
+    });
+  }
+
+  if (btnDeselectAll) {
+    btnDeselectAll.addEventListener('click', function() {
+      rowChecks.forEach(c => c.checked = false);
+      updateToolbar();
+    });
+  }
+
+  rowChecks.forEach(c => c.addEventListener('change', updateToolbar));
+
+  // Browse PC button in Import Modal
+  const btnBrowseImport = document.getElementById('btnBrowseImportVideo');
+  const inputImportPath = document.getElementById('importLocalPathInput');
+  if (btnBrowseImport && inputImportPath) {
+    btnBrowseImport.addEventListener('click', function() {
+      btnBrowseImport.disabled = true;
+      btnBrowseImport.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Browsing...';
+
+      const csrfToken = '{{ csrf_token() }}';
+      fetch('{{ url_for("videos.browse_file_dialog") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.path) {
+          inputImportPath.value = data.path;
+          inputImportPath.classList.add('is-valid');
+        } else if (data.error && data.error !== 'No file selected.') {
+          alert('Could not open file browser: ' + data.error);
+        }
+      })
+      .catch(err => {
+        console.error('Browse error:', err);
+      })
+      .finally(() => {
+        btnBrowseImport.disabled = false;
+        btnBrowseImport.innerHTML = '<i class="bi bi-folder2-open me-1"></i>Browse PC...';
+      });
+    });
+  }
+});
 </script>
 {% endblock %}

@@ -289,6 +289,68 @@ def retry_all_failed():
     return redirect(url_for("uploads.index"))
 
 
+@uploads_bp.route("/bulk-action", methods=["POST"])
+@login_required
+def bulk_action():
+    action = request.form.get("action", "").strip()
+    job_ids = request.form.getlist("job_ids")
+
+    if not job_ids:
+        flash("No upload jobs were selected.", "warning")
+        return redirect(url_for("uploads.index"))
+
+    parsed_ids = [int(jid) for jid in job_ids if jid.isdigit()]
+    if not parsed_ids:
+        flash("Invalid job selection.", "warning")
+        return redirect(url_for("uploads.index"))
+
+    jobs = (
+        UploadJob.query.join(
+            YouTubeChannel, UploadJob.destination_channel_id == YouTubeChannel.id
+        )
+        .join(ConnectedAccount, YouTubeChannel.connected_account_id == ConnectedAccount.id)
+        .filter(
+            ConnectedAccount.user_id == current_user.id,
+            UploadJob.id.in_(parsed_ids),
+        )
+        .all()
+    )
+
+    count = 0
+    if action == "retry":
+        for j in jobs:
+            if j.status in (UploadStatus.FAILED, UploadStatus.PAUSED):
+                j.status = UploadStatus.PENDING
+                j.retry_count = 0
+                j.error_message = None
+                count += 1
+    elif action == "pause":
+        for j in jobs:
+            if j.status in (UploadStatus.PENDING, UploadStatus.AWAITING_FILE):
+                j.status = UploadStatus.PAUSED
+                count += 1
+    elif action == "resume":
+        for j in jobs:
+            if j.status == UploadStatus.PAUSED:
+                j.status = UploadStatus.PENDING
+                count += 1
+    elif action == "cancel":
+        for j in jobs:
+            if j.status != UploadStatus.COMPLETED:
+                j.status = UploadStatus.FAILED
+                j.error_message = "Cancelled by user via bulk action"
+                count += 1
+
+    try:
+        db.session.commit()
+        flash(f"Updated {count} job(s) with action '{action}'.", "success")
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"Failed to perform bulk action: {exc}", "danger")
+
+    return redirect(url_for("uploads.index"))
+
+
 # ------------------------------------------------------------------ #
 # JSON Status API for Dynamic Live Queue Updates                      #
 # ------------------------------------------------------------------ #

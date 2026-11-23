@@ -344,3 +344,12 @@ class TestSettingsSchedulerRoutes:
         resp = auth_client.post("/settings/scheduler/run-now/invalid_job_id_xyz", follow_redirects=True)
         assert resp.status_code == 200
         assert b"Could not trigger job" in resp.data
+
+    def test_browse_folder_dialog_route(self, auth_client):
+        with patch("subprocess.run") as mock_sub:
+            mock_sub.return_value.stdout = "C:\\Videos\\WatchedFolder\n"
+            resp = auth_client.post("/settings/browse-folder-dialog")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["success"] is True
+            assert "WatchedFolder" in data["path"]

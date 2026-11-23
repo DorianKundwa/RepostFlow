@@ -21,6 +21,7 @@ from flask import (
     Blueprint,
     current_app,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -181,6 +182,39 @@ def add_folder():
         flash(f"Error saving watched folder: {exc}", "danger")
 
     return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/browse-folder-dialog", methods=["POST"])
+@login_required
+def browse_folder_dialog():
+    """
+    Launch native Windows folder browser dialog on the host system
+    and return the chosen absolute directory path as JSON.
+    """
+    import subprocess
+    import sys
+
+    if sys.platform != "win32":
+        return jsonify({"success": False, "error": "Native desktop dialog only available on Windows."}), 400
+
+    cmd = (
+        'powershell -NoProfile -ExecutionPolicy Bypass -Command "'
+        '[System.Reflection.Assembly]::LoadWithPartialName(\'System.Windows.Forms\') | Out-Null; '
+        '$d = New-Object System.Windows.Forms.FolderBrowserDialog; '
+        '$d.Description = \'Select Monitored Video Folder\'; '
+        '$d.ShowNewFolderButton = $true; '
+        'if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.SelectedPath }"'
+    )
+    try:
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
+        selected_path = proc.stdout.strip()
+        if selected_path:
+            return jsonify({"success": True, "path": selected_path})
+        return jsonify({"success": False, "error": "No folder selected."})
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "error": "Folder dialog timed out."})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)})
 
 
 @settings_bp.route("/folders/<int:folder_id>/toggle", methods=["POST"])
