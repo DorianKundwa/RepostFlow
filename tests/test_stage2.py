@@ -365,9 +365,16 @@ class TestChannelAndOAuthRoutes:
 
     def test_oauth_start_missing_secrets(self, auth_client):
         # When client_secrets.json does not exist on disk, /oauth/start catches FileNotFoundError and redirects with flash
-        resp = auth_client.get("/oauth/start?role=destination", follow_redirects=True)
-        assert resp.status_code == 200
-        assert b"client secrets file not found" in resp.data or b"Channels" in resp.data
+        with patch("app.services.google_auth.os.path.isfile", return_value=False):
+            resp = auth_client.get("/oauth/start?role=destination", follow_redirects=True)
+            assert resp.status_code == 200
+            assert b"client secrets file not found" in resp.data or b"Channels" in resp.data
+
+    def test_oauth_start_valid_redirect(self, auth_client):
+        # When client secrets exist, /oauth/start returns 302 redirecting to Google OAuth
+        resp = auth_client.get("/oauth/start?role=destination", follow_redirects=False)
+        assert resp.status_code == 302
+        assert "accounts.google.com" in resp.location
 
     def test_oauth_callback_state_mismatch(self, auth_client):
         with auth_client.session_transaction() as sess:

@@ -34,7 +34,7 @@ class BaseConfig:
     # Database                                                             #
     # ------------------------------------------------------------------ #
     # SQLite default keeps the database inside /instance/ (not in source).
-    _default_db = f"sqlite:///{BASE_DIR / 'instance' / 'repostflow.db'}"
+    _default_db = f"sqlite:///{(BASE_DIR / 'instance' / 'repostflow.db').as_posix()}"
     SQLALCHEMY_DATABASE_URI: str = os.environ.get("DATABASE_URL", _default_db)
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
     # Enables FK enforcement for SQLite. Ignored by PostgreSQL (always on).
