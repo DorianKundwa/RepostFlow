@@ -28,5 +28,8 @@ cryptography==43.0.0
 python-dotenv==1.0.1
 requests==2.32.3
 
+# --- Production WSGI Server ---
+waitress==3.0.2
+
 # --- Database (future PostgreSQL migration) ---
 # Uncomment for PostgreSQL: psycopg2-binary==2.9.9
