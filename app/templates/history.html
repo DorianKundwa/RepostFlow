@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Publishing History · RepostFlow{% endblock %}
+{% block breadcrumb %}Publishing History{% endblock %}
+
+{% block content %}
+<div class="rf-page-header">
+  <div>
+    <h2 class="rf-page-title"><i class="bi bi-clock-history me-2 text-rf-red"></i>Publishing History</h2>
+    <span class="text-muted small">Immutable historical record of completed distributions and permanently failed upload attempts.</span>
+  </div>
+  <div class="rf-page-actions">
+    <a href="{{ url_for('uploads.index') }}" class="btn btn-rf-outline btn-sm">
+      <i class="bi bi-cloud-upload-fill me-1"></i>Active Queue
+    </a>
+  </div>
+</div>
+
+<!-- ===== Summary Stat Card ===== -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="rf-stat-card d-flex align-items-center gap-3 p-3">
+      <div class="rf-stat-icon bg-success-subtle text-success p-3 rounded">
+        <i class="bi bi-check2-all fs-3"></i>
+      </div>
+      <div>
+        <div class="text-muted small">Total Successfully Published</div>
+        <div class="fs-4 fw-bold text-white">{{ total_published }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Filters ===== -->
+<div class="rf-panel mb-4">
+  <div class="rf-panel-body p-3">
+    <form method="GET" action="{{ url_for('uploads.history') }}" class="row g-2 align-items-center">
+      <div class="col-md-5">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-search"></i></span>
+          <input type="text" name="q" value="{{ search_q }}" class="form-control bg-dark text-white border-secondary"
+                 placeholder="Search by video title...">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <select name="status" class="form-select form-select-sm bg-dark text-white border-secondary">
+          <option value="">All Statuses</option>
+          <option value="completed" {% if current_status == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="failed" {% if current_status == 'failed' %}selected{% endif %}>Failed</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select name="channel_id" class="form-select form-select-sm bg-dark text-white border-secondary">
+          <option value="">All Destination Channels</option>
+          {% for ch in channels %}
+          <option value="{{ ch.id }}" {% if current_channel == ch.id %}selected{% endif %}>{{ ch.channel_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1 d-flex gap-1">
+        <button type="submit" class="btn btn-rf-primary btn-sm flex-grow-1">Filter</button>
+        {% if search_q or current_channel or current_status %}
+        <a href="{{ url_for('uploads.history') }}" class="btn btn-rf-outline btn-sm"><i class="bi bi-x"></i></a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== History Table ===== -->
+<div class="rf-panel mb-4">
+  <div class="rf-panel-header d-flex justify-content-between align-items-center">
+    <span>
+      <i class="bi bi-journal-text me-2 text-rf-red"></i>Publishing Records
+      <span class="badge bg-secondary ms-2">{{ records | length }}</span>
+    </span>
+  </div>
+  <div class="rf-panel-body p-0">
+    {% if records %}
+    <div class="table-responsive">
+      <table class="table rf-table mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Published At</th>
+            <th>Video Title</th>
+            <th>Source</th>
+            <th>Destination Channel</th>
+            <th>Privacy</th>
+            <th>Status</th>
+            <th>YouTube Link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <!-- Published At -->
+            <td class="text-muted small" style="white-space: nowrap;">
+              {{ r.uploaded_at.strftime('%d %b %Y %H:%M') if r.uploaded_at else '—' }}
+            </td>
+
+            <!-- Video Title -->
+            <td>
+              <div class="fw-semibold text-truncate" style="max-width: 280px;" title="{{ r.video_title }}">
+                {{ r.video_title or 'Untitled Video' }}
+              </div>
+              {% if r.video %}
+              <a href="{{ url_for('videos.detail', video_id=r.video.id) }}" class="text-muted small text-decoration-none">
+                <i class="bi bi-film me-1"></i>Library Video #{{ r.video.id }}
+              </a>
+              {% endif %}
+            </td>
+
+            <!-- Source Channel -->
+            <td>
+              {% if r.source_channel %}
+                <span class="badge bg-secondary-subtle text-light">
+                  <i class="bi bi-box-arrow-in-right me-1"></i>{{ r.source_channel.channel_name }}
+                </span>
+              {% elif r.video and r.video.source_type and r.video.source_type.value == 'folder' %}
+                <span class="badge bg-info-subtle text-info">
+                  <i class="bi bi-folder2 me-1"></i>Local Folder
+                </span>
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+
+            <!-- Destination Channel -->
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                {% if r.destination_channel and r.destination_channel.thumbnail_url %}
+                <img src="{{ r.destination_channel.thumbnail_url }}" alt="avatar" class="rounded-circle" width="22" height="22">
+                {% else %}
+                <i class="bi bi-youtube text-rf-red fs-6"></i>
+                {% endif %}
+                <span class="fw-medium text-truncate" style="max-width: 160px;">
+                  {{ r.destination_channel.channel_name if r.destination_channel else 'Unassigned' }}
+                </span>
+              </div>
+            </td>
+
+            <!-- Privacy -->
+            <td>
+              <span class="badge bg-secondary text-uppercase small">
+                {{ r.privacy_status or 'private' }}
+              </span>
+            </td>
+
+            <!-- Status -->
+            <td>
+              {% if r.upload_status == 'completed' %}
+                <span class="badge bg-success-subtle text-success">
+                  <i class="bi bi-check-circle me-1"></i>Completed
+                </span>
+              {% else %}
+                <span class="badge bg-danger-subtle text-danger" title="{{ r.error_message }}">
+                  <i class="bi bi-exclamation-triangle me-1"></i>Failed
+                </span>
+              {% endif %}
+            </td>
+
+            <!-- YouTube URL -->
+            <td>
+              {% if r.destination_video_url %}
+              <a href="{{ r.destination_video_url }}" target="_blank" rel="noopener noreferrer"
+                 class="btn btn-outline-danger btn-sm py-0 px-2" title="Open YouTube Video">
+                <i class="bi bi-play-btn me-1"></i>{{ r.destination_video_id or 'Watch' }}
+              </a>
+              {% elif r.error_message %}
+              <span class="text-danger small text-truncate d-inline-block" style="max-width: 200px;" title="{{ r.error_message }}">
+                {{ r.error_message }}
+              </span>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="rf-empty-state py-5 text-center">
+      <i class="bi bi-clock-history fs-1 mb-3 text-muted"></i>
+      <h5>No Publishing Records Yet</h5>
+      <p class="text-muted">
+        {% if search_q or current_channel or current_status %}
+          No publishing records match your active search filters.
+        {% else %}
+          When videos are uploaded and processed by the upload engine, a permanent audit trail will appear here.
+        {% endif %}
+      </p>
+      {% if search_q or current_channel or current_status %}
+      <a href="{{ url_for('uploads.history') }}" class="btn btn-rf-outline btn-sm">Clear Filters</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
