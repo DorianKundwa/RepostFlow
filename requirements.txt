@@ -1,0 +1,32 @@
+# RepostFlow - Python Dependencies
+# Generated for Stage 1. Updated as stages progress.
+
+# --- Core Framework ---
+Flask==3.0.3
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
+Flask-WTF==1.2.1
+WTForms==3.1.2
+
+# --- Google / YouTube ---
+google-api-python-client==2.139.0
+google-auth==2.34.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+
+# --- Background Workers ---
+APScheduler==3.10.4
+watchdog==4.0.1
+
+# --- Media Processing ---
+Pillow==10.4.0
+
+# --- Security / Crypto ---
+cryptography==43.0.0
+
+# --- Environment & Utilities ---
+python-dotenv==1.0.1
+requests==2.32.3
+
+# --- Database (future PostgreSQL migration) ---
+# Uncomment for PostgreSQL: psycopg2-binary==2.9.9
