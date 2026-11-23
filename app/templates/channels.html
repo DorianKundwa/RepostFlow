@@ -33,17 +33,10 @@
 
 <!-- ===== OAuth notice ===== -->
 <div class="alert rf-alert-info mb-3 d-flex align-items-start gap-2">
-  <i class="bi bi-info-circle-fill flex-shrink-0 mt-1"></i>
+  <i class="bi bi-shield-check flex-shrink-0 mt-1 fs-5 text-success"></i>
   <div>
-    <strong>How connecting works:</strong> Clicking "Connect Channel" redirects you to Google's
-    sign-in page. After granting access, RepostFlow will automatically discover the
-    YouTube channel(s) linked to that Google account.
-    <br>
-    <strong>Google developer note:</strong> While the app is in
-    <em>Testing</em> mode on Google Cloud, only accounts listed as Test Users can
-    authorise it. You will see an "unverified app" warning from Google — this is
-    expected during development.
-    <a href="#" class="rf-link-red" data-bs-toggle="modal" data-bs-target="#oauthHelpModal">
+    <strong>Google Cloud Status: In Production.</strong> RepostFlow is configured for permanent, long-lived OAuth tokens. Refresh tokens will <em>not</em> expire after 7 days, and 1-hour access tokens are automatically refreshed in the background.
+    <a href="#" class="rf-link-red ms-1" data-bs-toggle="modal" data-bs-target="#oauthHelpModal">
       Learn more
     </a>
   </div>
@@ -251,17 +244,17 @@
             </div>
           </div>
 
-          <div class="rf-account-meta">
-            <span class="text-muted small">
+          <div class="rf-account-meta d-flex flex-wrap align-items-center gap-2 mt-2">
+            <span class="badge bg-secondary-subtle text-secondary border">
               <i class="bi bi-broadcast-pin me-1"></i>
               {{ acc.youtube_channels | selectattr('is_active') | list | length }} channel(s)
             </span>
-            {% if acc.token_expires_at %}
-            <span class="text-muted small ms-3">
-              <i class="bi bi-clock me-1"></i>
-              Token expires {{ acc.token_expires_at.strftime('%d %b %Y') }}
+            <span class="badge bg-success-subtle text-success border border-success-subtle">
+              <i class="bi bi-shield-check me-1"></i>Production Token (Permanent)
             </span>
-            {% endif %}
+            <span class="text-muted small">
+              <i class="bi bi-arrow-repeat me-1 text-primary"></i>Auto-refreshed in background
+            </span>
           </div>
 
           <div class="mt-3 d-flex gap-2">
@@ -331,20 +324,11 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <h6>Why do I see an "unverified app" warning?</h6>
-        <p>Google requires apps that access sensitive scopes (like YouTube upload)
-        to pass an OAuth verification review before they can be used by the general
-        public. During development, your app is in <strong>Testing</strong> mode.
-        You will see a warning screen — click "Advanced → Go to [app name] (unsafe)"
-        to proceed. This is safe for your own account.</p>
+        <h6>Google Cloud Project Status: In Production</h6>
+        <p>Because your Google Cloud OAuth consent screen is configured as <strong>In Production</strong>, your refresh tokens are permanent and will <strong>not expire after 7 days</strong>. RepostFlow automatically requests fresh 1-hour access tokens behind the scenes, ensuring uninterrupted 24/7 channel monitoring and scheduled reposting.</p>
 
-        <h6>How to add test users</h6>
-        <ol>
-          <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a>.</li>
-          <li>Navigate to <strong>APIs &amp; Services → OAuth consent screen</strong>.</li>
-          <li>Under <strong>Test users</strong>, click <strong>+ Add users</strong>.</li>
-          <li>Add the Google email addresses that should be able to connect channels.</li>
-        </ol>
+        <h6>Why do I still see an "unverified app" warning from Google?</h6>
+        <p>Google displays an unverified app warning for any application requesting sensitive scopes (such as YouTube upload) until a public brand verification audit is conducted. Since RepostFlow is your private self-hosted automation system, you do <strong>not</strong> need to submit for Google verification. Simply click <strong>"Advanced → Go to RepostFlow (unsafe)"</strong> when authorising. This is completely safe for your own Google account.</p>
 
         <h6>YouTube API quota</h6>
         <p>YouTube Data API v3 provides <strong>10,000 units per day</strong> by default.

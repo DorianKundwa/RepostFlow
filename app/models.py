@@ -163,6 +163,11 @@ class ConnectedAccount(db.Model):
     last_refreshed = db.Column(DateTime(timezone=True), nullable=True)
     token_expires_at = db.Column(DateTime(timezone=True), nullable=True)
 
+    @property
+    def is_production_token(self) -> bool:
+        """Indicates whether this account uses long-lived production tokens (no 7-day test expiry)."""
+        return True
+
     __table_args__ = (
         UniqueConstraint("user_id", "google_account_id", name="uq_user_google_account"),
     )

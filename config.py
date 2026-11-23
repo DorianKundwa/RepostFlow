@@ -58,6 +58,8 @@ class BaseConfig:
     OAUTH_REDIRECT_URI: str = os.environ.get(
         "OAUTH_REDIRECT_URI", "http://localhost:5000/oauth/callback"
     )
+    # Publishing status on Google Cloud Console: "production" (permanent tokens) or "testing" (7-day tokens)
+    GOOGLE_OAUTH_STATUS: str = os.environ.get("GOOGLE_OAUTH_STATUS", "production")
     # Scopes requested during OAuth. Least privilege: only what is needed.
     YOUTUBE_SCOPES: list = [
         "https://www.googleapis.com/auth/youtube.readonly",   # read channel/video data
