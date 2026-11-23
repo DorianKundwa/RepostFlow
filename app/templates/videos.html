@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Video Library · RepostFlow{% endblock %}
+{% block breadcrumb %}Video Library{% endblock %}
+
+{% block content %}
+<div class="rf-page-header">
+  <div>
+    <h2 class="rf-page-title">
+      <i class="bi bi-film me-2 text-rf-red"></i>Video Library
+    </h2>
+    <span class="text-muted small">Central media catalogue with FFprobe inspection and automated thumbnail extraction.</span>
+  </div>
+  <div class="rf-page-actions">
+    <button class="btn btn-rf-primary" data-bs-toggle="modal" data-bs-target="#importVideoModal">
+      <i class="bi bi-plus-circle me-1"></i>Import Video
+    </button>
+  </div>
+</div>
+
+<!-- ===== Stats Header Ribbon ===== -->
+<div class="row g-2 mb-4">
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="rf-stat-card rf-card-blue p-2">
+      <div class="rf-stat-icon" style="width:36px; height:36px; font-size:18px"><i class="bi bi-film"></i></div>
+      <div class="rf-stat-body">
+        <div class="rf-stat-value fs-4">{{ stats.total }}</div>
+        <div class="rf-stat-label">Total Videos</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="rf-stat-card rf-card-green p-2">
+      <div class="rf-stat-icon" style="width:36px; height:36px; font-size:18px"><i class="bi bi-check2-circle"></i></div>
+      <div class="rf-stat-body">
+        <div class="rf-stat-value fs-4">{{ stats.ready }}</div>
+        <div class="rf-stat-label">Ready to Distribute</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="rf-stat-card rf-card-orange p-2">
+      <div class="rf-stat-icon" style="width:36px; height:36px; font-size:18px"><i class="bi bi-file-earmark-arrow-up"></i></div>
+      <div class="rf-stat-body">
+        <div class="rf-stat-value fs-4">{{ stats.awaiting_file }}</div>
+        <div class="rf-stat-label">Awaiting File</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="rf-stat-card rf-card-yellow p-2">
+      <div class="rf-stat-icon" style="width:36px; height:36px; font-size:18px"><i class="bi bi-hourglass-split"></i></div>
+      <div class="rf-stat-body">
+        <div class="rf-stat-value fs-4">{{ stats.queued }}</div>
+        <div class="rf-stat-label">Queued</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="rf-stat-card rf-card-teal p-2">
+      <div class="rf-stat-icon" style="width:36px; height:36px; font-size:18px"><i class="bi bi-cloud-check-fill"></i></div>
+      <div class="rf-stat-body">
+        <div class="rf-stat-value fs-4">{{ stats.uploaded }}</div>
+        <div class="rf-stat-label">Published</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="rf-stat-card rf-card-red p-2">
+      <div class="rf-stat-icon" style="width:36px; height:36px; font-size:18px"><i class="bi bi-exclamation-octagon-fill"></i></div>
+      <div class="rf-stat-body">
+        <div class="rf-stat-value fs-4">{{ stats.failed }}</div>
+        <div class="rf-stat-label">Failed</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Filter & Search Controls ===== -->
+<div class="rf-panel mb-4">
+  <div class="rf-panel-body p-3">
+    <form method="GET" action="{{ url_for('videos.index') }}" class="row g-2 align-items-center">
+      <div class="col-md-5">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" name="q" value="{{ search }}" class="form-control" placeholder="Search by video title, description, or filename..." />
+          {% if search %}
+          <a href="{{ url_for('videos.index') }}" class="btn btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-md-3">
+        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Statuses</option>
+          <option value="ready" {% if status_filter == 'ready' %}selected{% endif %}>Ready</option>
+          <option value="awaiting_file" {% if status_filter == 'awaiting_file' %}selected{% endif %}>Awaiting Original File</option>
+          <option value="queued" {% if status_filter == 'queued' %}selected{% endif %}>Queued</option>
+          <option value="uploaded" {% if status_filter == 'uploaded' %}selected{% endif %}>Uploaded</option>
+          <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select name="source" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="all" {% if source_filter == 'all' %}selected{% endif %}>All Sources</option>
+          <option value="local_folder" {% if source_filter == 'local_folder' %}selected{% endif %}>Local Folder</option>
+          <option value="youtube" {% if source_filter == 'youtube' %}selected{% endif %}>YouTube Channel</option>
+        </select>
+      </div>
+      <div class="col-md-1">
+        <button type="submit" class="btn btn-sm btn-outline-secondary w-100">Filter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== Video Table ===== -->
+<div class="rf-panel">
+  <div class="rf-panel-header d-flex justify-content-between align-items-center">
+    <span>
+      <i class="bi bi-grid-3x3-gap-fill me-2 text-rf-red"></i>Catalog
+      <span class="badge bg-secondary ms-2">{{ total }}</span>
+    </span>
+    <span class="text-muted small">Showing {{ videos | length }} of {{ total }}</span>
+  </div>
+  <div class="rf-panel-body p-0">
+    {% if videos %}
+    <div class="table-responsive">
+      <table class="table rf-table mb-0 align-middle">
+        <thead>
+          <tr>
+            <th style="width:140px">Preview</th>
+            <th>Title &amp; Source</th>
+            <th>Resolution &amp; Codec</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Privacy</th>
+            <th>Detected</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in videos %}
+          <tr>
+            <!-- Thumbnail -->
+            <td>
+              <a href="{{ url_for('videos.detail', video_id=v.id) }}" class="rf-video-table-thumb">
+                {% if v.local_thumbnail_path or v.thumbnail_url %}
+                <img src="{{ url_for('videos.thumbnail_preview', video_id=v.id) }}" alt="thumb" class="rounded" />
+                {% else %}
+                <div class="rf-thumb-placeholder rounded"><i class="bi bi-play-circle"></i></div>
+                {% endif %}
+                {% if v.duration_seconds %}
+                <span class="rf-thumb-duration">{{ '%d:%02d'|format(v.duration_seconds // 60, v.duration_seconds % 60) }}</span>
+                {% endif %}
+              </a>
+            </td>
+
+            <!-- Title & Source -->
+            <td>
+              <a href="{{ url_for('videos.detail', video_id=v.id) }}" class="fw-semibold text-rf-title text-decoration-none d-block text-truncate" style="max-width:280px" title="{{ v.title or v.original_filename }}">
+                {{ v.title or v.original_filename or 'Untitled' }}
+              </a>
+              <div class="small text-muted mt-1">
+                {% if v.source_type.value == 'youtube' %}
+                  <span class="badge bg-danger-subtle text-danger"><i class="bi bi-youtube me-1"></i>YouTube</span>
+                  {% if v.source_channel %}{{ v.source_channel.channel_name }}{% endif %}
+                {% else %}
+                  <span class="badge bg-info-subtle text-info"><i class="bi bi-folder2 me-1"></i>Local</span>
+                  {% if v.original_filename %}{{ v.original_filename }}{% endif %}
+                {% endif %}
+              </div>
+            </td>
+
+            <!-- Resolution & Codecs -->
+            <td>
+              {% if v.width and v.height %}
+                <span class="badge bg-dark border border-secondary text-light">
+                  {{ v.width }}x{{ v.height }}
+                  {% if v.height >= 2160 %} (4K)
+                  {% elif v.height >= 1080 %} (1080p)
+                  {% elif v.height >= 720 %} (720p)
+                  {% endif %}
+                </span>
+                {% if v.codec %}
+                <span class="badge bg-secondary-subtle text-secondary ms-1">{{ v.codec | upper }}</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+
+            <!-- Duration -->
+            <td>
+              {% if v.duration_seconds %}
+                {{ '%02d:%02d'|format(v.duration_seconds // 60, v.duration_seconds % 60) }}
+                {% if v.file_size_bytes %}
+                <div class="text-muted small">{{ (v.file_size_bytes / (1024*1024)) | round(1) }} MB</div>
+                {% endif %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+
+            <!-- Status -->
+            <td>
+              <span class="rf-badge-status rf-status-{{ v.status.value }}">
+                {{ v.status.value | replace('_', ' ') | capitalize }}
+              </span>
+            </td>
+
+            <!-- Privacy -->
+            <td>
+              <span class="badge text-capitalize {% if v.privacy_status.value == 'public' %}bg-success-subtle text-success{% elif v.privacy_status.value == 'unlisted' %}bg-warning-subtle text-warning{% else %}bg-secondary-subtle text-secondary{% endif %}">
+                {{ v.privacy_status.value }}
+              </span>
+            </td>
+
+            <!-- Date -->
+            <td class="small text-muted">
+              {{ v.detected_at.strftime('%d %b %Y %H:%M') if v.detected_at else '—' }}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-end">
+              <div class="btn-group btn-group-sm">
+                <a href="{{ url_for('videos.detail', video_id=v.id) }}" class="btn btn-outline-secondary" title="View details &amp; edit">
+                  <i class="bi bi-pencil-square"></i>
+                </a>
+                <button type="button" class="btn btn-outline-danger" title="Delete video"
+                        data-bs-toggle="modal"
+                        data-bs-target="#deleteVideoModal"
+                        data-video-id="{{ v.id }}"
+                        data-video-title="{{ v.title or v.original_filename }}">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="p-3 d-flex justify-content-between align-items-center border-top border-secondary-subtle">
+      <span class="text-muted small">Page {{ page }} of {{ total_pages }}</span>
+      <nav>
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('videos.index', page=page-1, q=search, status=status_filter, source=source_filter) }}">Previous</a>
+          </li>
+          {% for p in range(1, total_pages + 1) %}
+          <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for('videos.index', page=p, q=search, status=status_filter, source=source_filter) }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+          <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('videos.index', page=page+1, q=search, status=status_filter, source=source_filter) }}">Next</a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="rf-empty-state py-5">
+      <i class="bi bi-film fs-1 mb-3 text-rf-red"></i>
+      <h5>No videos found</h5>
+      <p class="text-muted mb-3">You can manually import video files or configure watched folders.</p>
+      <button class="btn btn-rf-primary" data-bs-toggle="modal" data-bs-target="#importVideoModal">
+        <i class="bi bi-cloud-arrow-up me-1"></i>Import Your First Video
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ===== Modal: Import Video ===== -->
+<div class="modal fade" id="importVideoModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content rf-modal">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-cloud-arrow-up text-rf-red me-2"></i>Import Local Video File</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('videos.import_file') }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <div class="modal-body">
+          <p class="text-muted small mb-3">
+            Supported formats: <strong>MP4, MOV, MKV, AVI, WEBM</strong>. RepostFlow uses FFprobe to validate and extract duration, resolution, codecs, and automatically generates a thumbnail.
+          </p>
+
+          <div class="mb-3">
+            <label class="form-label">Upload Video File</label>
+            <input type="file" name="video_file" class="form-control" accept=".mp4,.mov,.mkv,.avi,.webm" />
+            <div class="form-text text-muted">File will be placed in the safe local storage library.</div>
+          </div>
+
+          <div class="text-center my-2 text-muted">— OR —</div>
+
+          <div class="mb-3">
+            <label class="form-label">Existing Absolute Local File Path</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-hdd"></i></span>
+              <input type="text" name="local_path" class="form-control" placeholder="C:\Users\admin\Videos\project_clip.mp4" />
+            </div>
+            <div class="form-text text-muted">RepostFlow reads the original file directly without duplicating storage.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Custom Title (Optional)</label>
+            <input type="text" name="title" class="form-control" placeholder="Defaults to filename if left blank" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-rf-primary"><i class="bi bi-check2-circle me-1"></i>Import &amp; Inspect</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Modal: Delete Video ===== -->
+<div class="modal fade" id="deleteVideoModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content rf-modal">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-trash text-danger me-2"></i>Remove Video from Library</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="deleteVideoForm" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <div class="modal-body">
+          <p>Are you sure you want to remove <strong id="deleteVideoTitle"></strong> from RepostFlow?</p>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" name="delete_local_file" value="1" id="deleteLocalCheck" />
+            <label class="form-check-label text-muted small" for="deleteLocalCheck">
+              Also delete original video file from disk (permanent)
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm Delete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const delModal = document.getElementById('deleteVideoModal');
+if (delModal) {
+  delModal.addEventListener('show.bs.modal', function(e) {
+    const btn = e.relatedTarget;
+    const vId = btn.getAttribute('data-video-id');
+    const vTitle = btn.getAttribute('data-video-title');
+    document.getElementById('deleteVideoTitle').textContent = vTitle;
+    document.getElementById('deleteVideoForm').action = '/videos/' + vId + '/delete';
+  });
+}
+</script>
+{% endblock %}
