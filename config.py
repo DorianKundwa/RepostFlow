@@ -19,7 +19,7 @@ load_dotenv(BASE_DIR / ".env")
 
 class BaseConfig:
     # ------------------------------------------------------------------ #
-    # Flask Core                                                           #
+    # Flask Core & Cookie Security                                        #
     # ------------------------------------------------------------------ #
     SECRET_KEY: str = os.environ.get("SECRET_KEY", "dev-insecure-key-change-me")
     if SECRET_KEY == "dev-insecure-key-change-me":
@@ -29,6 +29,12 @@ class BaseConfig:
             "Set SECRET_KEY in your .env file before running in production.",
             stacklevel=2,
         )
+
+    # Session & Cookie Security
+    SESSION_COOKIE_HTTPONLY: bool = True
+    SESSION_COOKIE_SAMESITE: str = "Lax"
+    REMEMBER_COOKIE_HTTPONLY: bool = True
+    REMEMBER_COOKIE_SAMESITE: str = "Lax"
 
     # ------------------------------------------------------------------ #
     # Database                                                             #

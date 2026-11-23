@@ -67,6 +67,11 @@ def create_app(config_override=None) -> Flask:
     _register_blueprints(app)
 
     # ---------------------------------------------------------------- #
+    # Security Hardening Headers                                         #
+    # ---------------------------------------------------------------- #
+    _register_security_headers(app)
+
+    # ---------------------------------------------------------------- #
     # Database initialisation                                            #
     # ---------------------------------------------------------------- #
     with app.app_context():
@@ -173,3 +178,25 @@ def _seed_default_settings(app: Flask) -> None:
             ))
 
     db.session.commit()
+
+
+def _register_security_headers(app: Flask) -> None:
+    """Attach enterprise security headers to all HTTP responses."""
+    @app.after_request
+    def set_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https:; "
+            "media-src 'self' blob:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'self';"
+        )
+        return response
