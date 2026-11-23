@@ -20,6 +20,8 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard.index"))
 
+    no_users = User.query.count() == 0
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -32,7 +34,7 @@ def login():
             return redirect(next_page or url_for("dashboard.index"))
         flash("Invalid username or password.", "danger")
 
-    return render_template("auth/login.html")
+    return render_template("auth/login.html", no_users=no_users)
 
 
 @auth_bp.route("/logout")
