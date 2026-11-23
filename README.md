@@ -28,7 +28,7 @@ RepostFlow is a self-hosted YouTube video distribution and automation platform. 
 
 ## Features
 
-**Current (Stages 1 through 8 Complete)**
+**Current (Stages 1 through 9 Complete)**
 - Project structure and Flask application factory
 - Full database schema (11 tables: Users, Accounts, Channels, Folders, Videos, Rules, Destinations, UploadJobs, History, Settings, Notifications)
 - Local user authentication (registration with admin grant, login, logout)
@@ -76,11 +76,13 @@ RepostFlow is a self-hosted YouTube video distribution and automation platform. 
 - Watched folder maintenance sweep periodically verifying directory stability
 - Dynamic job rescheduling upon application settings changes without process restarts
 - In-dashboard scheduler controls (Pause/Resume daemon, On-demand "Run Now" dispatch, schedule table)
+- HTTP security hardening middleware (CSP, X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy)
+- Session cookie hardening (`HttpOnly`, `SameSite=Lax`)
+- Hot SQLite online backup engine with pre- and post-integrity checks (`backup.py`, `backup_service.py`)
+- Production WSGI server setup via Waitress (`wsgi.py`, `deploy/start_windows.py`)
+- Production VPS / Linux deployment configs (systemd service unit `repostflow.service`, Nginx reverse proxy `nginx.conf`)
 - Dark SaaS-style responsive dashboard with Bootstrap 5
-- Comprehensive test suite (119 tests, all passing)
-
-**Planned (Next Stages)**
-- Security hardening, production deployment guides & backup workflows (Stage 9)
+- Comprehensive test suite (125 tests, all passing)
 
 ---
 
@@ -366,7 +368,7 @@ copy instance\repostflow.db.backup instance\repostflow.db
 | 6  | Automation rule engine (Loop prevention, metadata transformations & UploadJob queuing) | ✅ Complete |
 | 7  | Resumable YouTube upload engine, upload queue UI, and publishing history | ✅ Complete |
 | 8  | Background task scheduling via APScheduler & automated workers | ✅ Complete |
-| 9  | Security hardening, production deployment guides & backup workflows | Planned |
+| 9  | Security hardening, backup & disaster recovery CLI, and production deployment | ✅ Complete |
 
 ---
 
@@ -377,4 +379,4 @@ venv\Scripts\activate
 pytest tests\ -v
 ```
 
-Expected output: **119 passed**.
+Expected output: **125 passed**.
