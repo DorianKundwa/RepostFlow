@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Overview · RepostFlow{% endblock %}
+{% block breadcrumb %}Overview{% endblock %}
+
+{% block content %}
+<div class="rf-page-header">
+  <h2 class="rf-page-title">
+    <i class="bi bi-grid-1x2-fill me-2 text-rf-red"></i>Overview
+  </h2>
+  <span class="text-muted small">All statistics are live from the database.</span>
+</div>
+
+<!-- ===== Stats cards ===== -->
+<div class="row g-3 mb-4">
+  {% set cards = [
+    ("Connected Channels", stats.total_channels, "bi-broadcast-pin", "rf-card-blue"),
+    ("Source Channels",    stats.source_channels, "bi-cloud-download-fill", "rf-card-purple"),
+    ("Destination Channels", stats.dest_channels, "bi-cloud-upload-fill",  "rf-card-teal"),
+    ("Videos Detected",   stats.videos_detected,  "bi-film",               "rf-card-orange"),
+    ("Videos Published",  stats.videos_published, "bi-check-circle-fill",  "rf-card-green"),
+    ("Pending Uploads",   stats.pending_uploads,  "bi-hourglass-split",    "rf-card-yellow"),
+    ("Failed Uploads",    stats.failed_uploads,   "bi-exclamation-circle-fill", "rf-card-red"),
+  ] %}
+  {% for label, value, icon, css in cards %}
+  <div class="col-6 col-md-4 col-xl-3">
+    <div class="rf-stat-card {{ css }}">
+      <div class="rf-stat-icon"><i class="bi {{ icon }}"></i></div>
+      <div class="rf-stat-body">
+        <div class="rf-stat-value">{{ value }}</div>
+        <div class="rf-stat-label">{{ label }}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ===== Two-column lower section ===== -->
+<div class="row g-3">
+
+  <!-- Upload Queue preview -->
+  <div class="col-lg-6">
+    <div class="rf-panel">
+      <div class="rf-panel-header">
+        <i class="bi bi-cloud-upload-fill me-2 text-rf-red"></i>Upload Queue
+        <a href="{{ url_for('uploads.index') }}" class="rf-panel-link ms-auto">View all</a>
+      </div>
+      <div class="rf-panel-body">
+        {% if queue_preview %}
+        <table class="table table-sm rf-table">
+          <thead>
+            <tr><th>Video</th><th>Destination</th><th>Status</th><th>Progress</th></tr>
+          </thead>
+          <tbody>
+            {% for job in queue_preview %}
+            <tr>
+              <td class="text-truncate" style="max-width:160px">{{ job.upload_title or 'Untitled' }}</td>
+              <td class="text-truncate" style="max-width:120px">{{ job.destination_channel.channel_name if job.destination_channel else '—' }}</td>
+              <td><span class="rf-badge-status rf-status-{{ job.status.value }}">{{ job.status.value }}</span></td>
+              <td>
+                <div class="progress rf-progress-mini">
+                  <div class="progress-bar bg-rf-red" style="width:{{ job.progress_percent }}%"></div>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="rf-empty-state">
+          <i class="bi bi-inbox fs-2 mb-2"></i>
+          <p>No uploads currently queued.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="col-lg-6">
+    <div class="rf-panel">
+      <div class="rf-panel-header">
+        <i class="bi bi-clock-history me-2 text-rf-red"></i>Recent Activity
+      </div>
+      <div class="rf-panel-body">
+        {% if recent_history %}
+        <ul class="rf-activity-list">
+          {% for h in recent_history %}
+          <li class="rf-activity-item">
+            <span class="rf-activity-icon rf-status-dot-{{ 'green' if h.upload_status == 'completed' else 'red' }}">
+              <i class="bi {{ 'bi-check-circle-fill' if h.upload_status == 'completed' else 'bi-x-circle-fill' }}"></i>
+            </span>
+            <div class="rf-activity-body">
+              <span class="rf-activity-title">{{ h.video_title or 'Untitled' }}</span>
+              <span class="rf-activity-meta">
+                → {{ h.destination_channel.channel_name if h.destination_channel else '—' }}
+                · {{ h.uploaded_at.strftime('%d %b %H:%M') if h.uploaded_at else '' }}
+              </span>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="rf-empty-state">
+          <i class="bi bi-clock fs-2 mb-2"></i>
+          <p>No publishing history yet.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Connected channels -->
+  <div class="col-lg-6">
+    <div class="rf-panel">
+      <div class="rf-panel-header">
+        <i class="bi bi-broadcast-pin me-2 text-rf-red"></i>Connected Channels
+        <a href="{{ url_for('channels.index') }}" class="rf-panel-link ms-auto">Manage</a>
+      </div>
+      <div class="rf-panel-body">
+        {% if channels %}
+        <ul class="rf-channel-list">
+          {% for ch in channels %}
+          <li class="rf-channel-item">
+            {% if ch.thumbnail_url %}
+            <img src="{{ ch.thumbnail_url }}" class="rf-channel-avatar" alt="{{ ch.channel_name }}" />
+            {% else %}
+            <div class="rf-channel-avatar rf-avatar-placeholder"><i class="bi bi-person-circle"></i></div>
+            {% endif %}
+            <div class="rf-channel-body">
+              <span class="rf-channel-name">{{ ch.channel_name }}</span>
+              <span class="rf-channel-role rf-role-{{ ch.role.value }}">{{ ch.role.value | capitalize }}</span>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="rf-empty-state">
+          <i class="bi bi-broadcast-pin fs-2 mb-2"></i>
+          <p>No channels connected yet.</p>
+          <a href="{{ url_for('channels.index') }}" class="btn btn-sm btn-rf-primary mt-1">
+            <i class="bi bi-plus-circle me-1"></i>Add Channel
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent videos -->
+  <div class="col-lg-6">
+    <div class="rf-panel">
+      <div class="rf-panel-header">
+        <i class="bi bi-film me-2 text-rf-red"></i>Recent Videos
+        <a href="{{ url_for('videos.index') }}" class="rf-panel-link ms-auto">Library</a>
+      </div>
+      <div class="rf-panel-body">
+        {% if recent_videos %}
+        <ul class="rf-video-list">
+          {% for v in recent_videos %}
+          <li class="rf-video-item">
+            <div class="rf-video-thumb-placeholder">
+              {% if v.local_thumbnail_path %}
+              <img src="{{ v.local_thumbnail_path }}" alt="thumb" />
+              {% else %}
+              <i class="bi bi-play-circle"></i>
+              {% endif %}
+            </div>
+            <div class="rf-video-body">
+              <span class="rf-video-title">{{ v.title or v.original_filename or 'Untitled' }}</span>
+              <span class="rf-video-meta">{{ v.status.value | capitalize }} · {{ v.detected_at.strftime('%d %b %Y') if v.detected_at else '' }}</span>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="rf-empty-state">
+          <i class="bi bi-film fs-2 mb-2"></i>
+          <p>No videos in the library yet.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
