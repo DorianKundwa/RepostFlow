@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Create Account · RepostFlow{% endblock %}
+
+{% block content %}
+<div class="rf-auth-card">
+  <div class="rf-auth-logo">
+    <i class="bi bi-play-circle-fill rf-logo-icon-lg"></i>
+    <h1 class="rf-auth-title">RepostFlow</h1>
+    <p class="rf-auth-subtitle">Initial Setup — Create Admin Account</p>
+  </div>
+
+  <div class="alert alert-info small mb-3">
+    <i class="bi bi-info-circle me-1"></i>
+    This is a one-time setup. After creating your account, registration will be disabled.
+  </div>
+
+  <form method="POST" action="{{ url_for('auth.register') }}" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+    <div class="mb-3">
+      <label for="username" class="form-label">Username</label>
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-person"></i></span>
+        <input type="text" class="form-control" id="username" name="username"
+               placeholder="Choose a username" required minlength="3" autofocus />
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label for="email" class="form-label">Email</label>
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+        <input type="email" class="form-control" id="email" name="email"
+               placeholder="your@email.com" required />
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label for="password" class="form-label">Password</label>
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-lock"></i></span>
+        <input type="password" class="form-control" id="password" name="password"
+               placeholder="Minimum 8 characters" required minlength="8" />
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label for="confirm_password" class="form-label">Confirm Password</label>
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+        <input type="password" class="form-control" id="confirm_password" name="confirm_password"
+               placeholder="Repeat your password" required />
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-rf-primary w-100">
+      <i class="bi bi-person-plus me-2"></i>Create Account
+    </button>
+  </form>
+</div>
+{% endblock %}
