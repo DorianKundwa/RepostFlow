@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}Upload Queue · RepostFlow{% endblock %}
+{% block breadcrumb %}Upload Queue{% endblock %}
+
+{% block content %}
+<div class="rf-page-header">
+  <div>
+    <h2 class="rf-page-title"><i class="bi bi-cloud-upload-fill me-2 text-rf-red"></i>Resumable Upload Queue</h2>
+    <span class="text-muted small">Monitor real-time resumable chunked uploads to your destination YouTube channels.</span>
+  </div>
+  <div class="rf-page-actions d-flex gap-2">
+    {% if stats.failed > 0 %}
+    <form action="{{ url_for('uploads.retry_all_failed') }}" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+      <button type="submit" class="btn btn-warning btn-sm">
+        <i class="bi bi-arrow-repeat me-1"></i>Retry All Failed ({{ stats.failed }})
+      </button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('uploads.history') }}" class="btn btn-rf-outline btn-sm">
+      <i class="bi bi-clock-history me-1"></i>View History
+    </a>
+  </div>
+</div>
+
+<!-- ===== Status Badges Bar ===== -->
+<div class="d-flex flex-wrap gap-2 mb-4">
+  <a href="{{ url_for('uploads.index') }}"
+     class="btn btn-sm {% if not current_status %}btn-secondary{% else %}btn-rf-outline{% endif %}">
+    All <span class="badge bg-dark ms-1">{{ stats.all }}</span>
+  </a>
+  <a href="{{ url_for('uploads.index', status='pending') }}"
+     class="btn btn-sm {% if current_status == 'pending' %}btn-primary{% else %}btn-rf-outline{% endif %}">
+    <i class="bi bi-hourglass-split me-1 text-warning"></i>Pending
+    <span class="badge bg-dark ms-1">{{ stats.pending }}</span>
+  </a>
+  <a href="{{ url_for('uploads.index', status='uploading') }}"
+     class="btn btn-sm {% if current_status == 'uploading' %}btn-primary{% else %}btn-rf-outline{% endif %}">
+    <i class="bi bi-arrow-up-circle me-1 text-info"></i>Uploading
+    <span class="badge bg-dark ms-1">{{ stats.uploading }}</span>
+  </a>
+  <a href="{{ url_for('uploads.index', status='completed') }}"
+     class="btn btn-sm {% if current_status == 'completed' %}btn-success{% else %}btn-rf-outline{% endif %}">
+    <i class="bi bi-check-circle me-1 text-success"></i>Completed
+    <span class="badge bg-dark ms-1">{{ stats.completed }}</span>
+  </a>
+  <a href="{{ url_for('uploads.index', status='failed') }}"
+     class="btn btn-sm {% if current_status == 'failed' %}btn-danger{% else %}btn-rf-outline{% endif %}">
+    <i class="bi bi-exclamation-triangle me-1 text-danger"></i>Failed
+    <span class="badge bg-dark ms-1">{{ stats.failed }}</span>
+  </a>
+  <a href="{{ url_for('uploads.index', status='paused') }}"
+     class="btn btn-sm {% if current_status == 'paused' %}btn-secondary{% else %}btn-rf-outline{% endif %}">
+    <i class="bi bi-pause-circle me-1 text-muted"></i>Paused
+    <span class="badge bg-dark ms-1">{{ stats.paused }}</span>
+  </a>
+  <a href="{{ url_for('uploads.index', status='awaiting_file') }}"
+     class="btn btn-sm {% if current_status == 'awaiting_file' %}btn-warning text-dark{% else %}btn-rf-outline{% endif %}">
+    <i class="bi bi-file-earmark-break me-1"></i>Awaiting Master File
+    <span class="badge bg-dark ms-1">{{ stats.awaiting_file }}</span>
+  </a>
+</div>
+
+<!-- ===== Filters ===== -->
+<div class="rf-panel mb-4">
+  <div class="rf-panel-body p-3">
+    <form method="GET" action="{{ url_for('uploads.index') }}" class="row g-2 align-items-center">
+      {% if current_status %}
+      <input type="hidden" name="status" value="{{ current_status }}">
+      {% endif %}
+      <div class="col-md-5">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-search"></i></span>
+          <input type="text" name="q" value="{{ search_q }}" class="form-control bg-dark text-white border-secondary"
+                 placeholder="Search by video title or original filename...">
+        </div>
+      </div>
+      <div class="col-md-4">
+        <select name="channel_id" class="form-select form-select-sm bg-dark text-white border-secondary">
+          <option value="">All Destination Channels</option>
+          {% for ch in channels %}
+          <option value="{{ ch.id }}" {% if current_channel == ch.id %}selected{% endif %}>{{ ch.channel_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-rf-primary btn-sm flex-grow-1">Filter</button>
+        {% if search_q or current_channel or current_status %}
+        <a href="{{ url_for('uploads.index') }}" class="btn btn-rf-outline btn-sm">Reset</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== Upload Jobs Table ===== -->
+<div class="rf-panel mb-4">
+  <div class="rf-panel-header d-flex justify-content-between align-items-center">
+    <span>
+      <i class="bi bi-list-task me-2 text-rf-red"></i>Jobs in Queue
+      <span class="badge bg-secondary ms-2">{{ jobs | length }}</span>
+    </span>
+  </div>
+  <div class="rf-panel-body p-0">
+    {% if jobs %}
+    <div class="table-responsive">
+      <table class="table rf-table mb-0 align-middle">
+        <thead>
+          <tr>
+            <th style="width: 50px;">#</th>
+            <th>Video Title</th>
+            <th>Destination Channel</th>
+            <th>Privacy</th>
+            <th style="min-width: 140px;">Upload Progress</th>
+            <th>Status</th>
+            <th>Retries</th>
+            <th>Created</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="uploadJobsTbody">
+          {% for j in jobs %}
+          <tr id="job-row-{{ j.id }}" data-job-id="{{ j.id }}" data-status="{{ j.status.value }}">
+            <!-- Job ID -->
+            <td class="text-muted small">#{{ j.id }}</td>
+
+            <!-- Video Info -->
+            <td>
+              <div class="fw-semibold text-truncate" style="max-width: 250px;" title="{{ j.upload_title or (j.video.title if j.video else 'Untitled') }}">
+                {{ j.upload_title or (j.video.title if j.video else 'Untitled Video') }}
+              </div>
+              <div class="text-muted small text-truncate" style="max-width: 250px;">
+                {% if j.video %}
+                  <a href="{{ url_for('videos.detail', video_id=j.video.id) }}" class="text-muted text-decoration-none">
+                    <i class="bi bi-film me-1"></i>{{ j.video.original_filename or 'Master file' }}
+                  </a>
+                {% else %}
+                  <span class="text-danger">No Video Record</span>
+                {% endif %}
+              </div>
+            </td>
+
+            <!-- Destination Channel -->
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                {% if j.destination_channel and j.destination_channel.thumbnail_url %}
+                <img src="{{ j.destination_channel.thumbnail_url }}" alt="avatar" class="rounded-circle" width="24" height="24">
+                {% else %}
+                <i class="bi bi-youtube text-rf-red fs-5"></i>
+                {% endif %}
+                <span class="fw-medium text-truncate" style="max-width: 150px;">
+                  {{ j.destination_channel.channel_name if j.destination_channel else 'Unassigned' }}
+                </span>
+              </div>
+            </td>
+
+            <!-- Privacy Status -->
+            <td>
+              <span class="badge bg-secondary text-uppercase small">
+                {{ j.upload_privacy.value if j.upload_privacy else 'private' }}
+              </span>
+            </td>
+
+            <!-- Progress Bar -->
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="progress flex-grow-1" style="height: 8px; background-color: #2b2b2b;">
+                  <div id="job-progress-bar-{{ j.id }}"
+                       class="progress-bar {% if j.status.value == 'completed' %}bg-success{% elif j.status.value == 'failed' %}bg-danger{% else %}bg-danger{% endif %}"
+                       role="progressbar"
+                       style="width: {{ j.progress_percent }}%;"
+                       aria-valuenow="{{ j.progress_percent }}"
+                       aria-valuemin="0"
+                       aria-valuemax="100">
+                  </div>
+                </div>
+                <small id="job-progress-text-{{ j.id }}" class="text-muted" style="min-width: 35px; text-align: right;">
+                  {{ j.progress_percent }}%
+                </small>
+              </div>
+            </td>
+
+            <!-- Status Badge -->
+            <td>
+              {% if j.status.value == 'completed' %}
+                <span id="job-status-badge-{{ j.id }}" class="badge bg-success-subtle text-success">
+                  <i class="bi bi-check-circle me-1"></i>Completed
+                </span>
+              {% elif j.status.value == 'uploading' %}
+                <span id="job-status-badge-{{ j.id }}" class="badge bg-info-subtle text-info">
+                  <span class="spinner-border spinner-border-sm me-1" role="status"></span>Uploading
+                </span>
+              {% elif j.status.value == 'failed' %}
+                <span id="job-status-badge-{{ j.id }}" class="badge bg-danger-subtle text-danger" title="{{ j.error_message }}">
+                  <i class="bi bi-exclamation-triangle me-1"></i>Failed
+                </span>
+              {% elif j.status.value == 'paused' %}
+                <span id="job-status-badge-{{ j.id }}" class="badge bg-secondary-subtle text-secondary">
+                  <i class="bi bi-pause-circle me-1"></i>Paused
+                </span>
+              {% elif j.status.value == 'awaiting_file' %}
+                <span id="job-status-badge-{{ j.id }}" class="badge bg-warning-subtle text-warning">
+                  <i class="bi bi-file-earmark-break me-1"></i>Awaiting Master
+                </span>
+              {% else %}
+                <span id="job-status-badge-{{ j.id }}" class="badge bg-primary-subtle text-primary">
+                  <i class="bi bi-hourglass-split me-1"></i>Pending
+                </span>
+              {% endif %}
+            </td>
+
+            <!-- Retries -->
+            <td class="small text-muted">
+              {{ j.retry_count }} / {{ j.max_retries }}
+            </td>
+
+            <!-- Created -->
+            <td class="small text-muted">
+              {{ j.created_at.strftime('%d %b %H:%M') if j.created_at else '—' }}
+            </td>
+
+            <!-- Actions -->
+            <td class="text-end">
+              <div class="d-inline-flex gap-1">
+                {% if j.destination_video_url %}
+                <a href="{{ j.destination_video_url }}" target="_blank" rel="noopener noreferrer"
+                   class="btn btn-outline-danger btn-sm" title="Watch on YouTube">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+                {% endif %}
+
+                {% if j.status.value in ['pending', 'failed'] %}
+                <form action="{{ url_for('uploads.run_job', job_id=j.id) }}" method="POST" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                  <button type="submit" class="btn btn-rf-primary btn-sm" title="Upload Now">
+                    <i class="bi bi-play-fill"></i>
+                  </button>
+                </form>
+                {% endif %}
+
+                {% if j.status.value == 'uploading' %}
+                <form action="{{ url_for('uploads.pause_job_endpoint', job_id=j.id) }}" method="POST" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                  <button type="submit" class="btn btn-outline-secondary btn-sm" title="Pause">
+                    <i class="bi bi-pause-fill"></i>
+                  </button>
+                </form>
+                {% elif j.status.value == 'paused' %}
+                <form action="{{ url_for('uploads.resume_job_endpoint', job_id=j.id) }}" method="POST" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                  <button type="submit" class="btn btn-outline-success btn-sm" title="Resume">
+                    <i class="bi bi-play-fill"></i>
+                  </button>
+                </form>
+                {% endif %}
+
+                {% if j.status.value == 'failed' %}
+                <form action="{{ url_for('uploads.retry_job_endpoint', job_id=j.id) }}" method="POST" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                  <button type="submit" class="btn btn-outline-warning btn-sm" title="Retry">
+                    <i class="bi bi-arrow-repeat"></i>
+                  </button>
+                </form>
+                {% endif %}
+
+                <form action="{{ url_for('uploads.cancel_job_endpoint', job_id=j.id) }}" method="POST" class="d-inline"
+                      onsubmit="return confirm('Cancel and remove Job #{{ j.id }} from queue?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token else '' }}">
+                  <button type="submit" class="btn btn-outline-danger btn-sm" title="Cancel Job">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% if j.error_message %}
+          <tr class="table-dark text-danger small">
+            <td colspan="9" class="py-1 px-4">
+              <i class="bi bi-exclamation-circle me-1"></i><strong>Error:</strong> {{ j.error_message }}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="rf-empty-state py-5 text-center">
+      <i class="bi bi-cloud-upload fs-1 mb-3 text-rf-red"></i>
+      <h5>No Upload Jobs in Queue</h5>
+      <p class="text-muted">
+        {% if search_q or current_channel or current_status %}
+          No upload jobs match your active filters.
+        {% else %}
+          Videos queued by automation rules or manually dispatched will appear here for processing.
+        {% endif %}
+      </p>
+      {% if search_q or current_channel or current_status %}
+      <a href="{{ url_for('uploads.index') }}" class="btn btn-rf-outline btn-sm">Clear Filters</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-poll active upload jobs every 4 seconds
+(function() {
+  const hasActiveJobs = document.querySelector('[data-status="uploading"], [data-status="pending"]');
+  if (!hasActiveJobs) return;
+
+  const pollInterval = setInterval(async () => {
+    try {
+      const response = await fetch("{{ url_for('uploads.api_status') }}");
+      if (!response.ok) return;
+      const data = await response.json();
+      if (!data.active_jobs || data.active_jobs.length === 0) {
+        clearInterval(pollInterval);
+        return;
+      }
+
+      data.active_jobs.forEach(job => {
+        const pBar = document.getElementById(`job-progress-bar-${job.id}`);
+        const pText = document.getElementById(`job-progress-text-${job.id}`);
+        const badge = document.getElementById(`job-status-badge-${job.id}`);
+
+        if (pBar) {
+          pBar.style.width = `${job.progress_percent}%`;
+          pBar.setAttribute('aria-valuenow', job.progress_percent);
+        }
+        if (pText) {
+          pText.innerText = `${job.progress_percent}%`;
+        }
+        if (badge) {
+          if (job.status === 'uploading') {
+            badge.className = 'badge bg-info-subtle text-info';
+            badge.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Uploading';
+          } else if (job.status === 'completed') {
+            badge.className = 'badge bg-success-subtle text-success';
+            badge.innerHTML = '<i class="bi bi-check-circle me-1"></i>Completed';
+          } else if (job.status === 'failed') {
+            badge.className = 'badge bg-danger-subtle text-danger';
+            badge.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Failed';
+          }
+        }
+      });
+    } catch (err) {
+      console.warn("Upload status polling error:", err);
+    }
+  }, 4000);
+})();
+</script>
+{% endblock %}
