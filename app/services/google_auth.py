@@ -193,9 +193,10 @@ def dict_to_credentials(creds_dict: dict) -> Credentials:
     if creds_dict.get("expiry"):
         try:
             expiry = datetime.fromisoformat(creds_dict["expiry"])
-            # Ensure timezone-aware
-            if expiry.tzinfo is None:
-                expiry = expiry.replace(tzinfo=timezone.utc)
+            # google.auth.credentials requires a NAIVE UTC datetime for expiry.
+            # If fromisoformat produced an aware datetime, convert to UTC and strip tzinfo.
+            if expiry.tzinfo is not None:
+                expiry = expiry.astimezone(timezone.utc).replace(tzinfo=None)
         except ValueError:
             pass
 
@@ -240,7 +241,18 @@ def get_valid_credentials(connected_account) -> Optional[Credentials]:
     creds = dict_to_credentials(creds_dict)
 
     # Refresh if expired and a refresh token is available.
-    if creds.expired and creds.refresh_token:
+    try:
+        is_expired = creds.expired
+    except Exception as exc:
+        logger.warning(
+            "Could not check creds.expired for account %s (%s): %s",
+            connected_account.id,
+            connected_account.email,
+            exc,
+        )
+        is_expired = False
+
+    if is_expired and creds.refresh_token:
         try:
             creds.refresh(Request())
             logger.info(

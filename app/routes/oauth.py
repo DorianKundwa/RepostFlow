@@ -207,7 +207,12 @@ def callback():
         return redirect(url_for("channels.index"))
 
     # --- Discover YouTube channels ---
-    channels_data, err = fetch_channels_for_account(account)
+    try:
+        channels_data, err = fetch_channels_for_account(account)
+    except Exception as exc:
+        logger.error("Unhandled error discovering YouTube channels: %s", exc)
+        flash(f"Connected Google account, but encountered an error discovering YouTube channels: {exc}", "warning")
+        return redirect(url_for("channels.index"))
 
     if err:
         flash(

@@ -153,6 +153,7 @@ class TestTokenEncryption:
         assert creds_obj.token == "token123"
         assert creds_obj.refresh_token == "refresh123"
         assert creds_obj.scopes == ["scope1", "scope2"]
+        assert not creds_obj.expired
 
 
 # ------------------------------------------------------------------ #

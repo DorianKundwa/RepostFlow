@@ -58,7 +58,12 @@ def _build_youtube_service(connected_account: ConnectedAccount):
     Build an authenticated YouTube API service for the given account.
     Returns (service, error_message).
     """
-    creds = get_valid_credentials(connected_account)
+    try:
+        creds = get_valid_credentials(connected_account)
+    except Exception as exc:
+        logger.error("Failed to retrieve credentials for account %s: %s", getattr(connected_account, "id", None), exc)
+        return None, f"Could not obtain credentials: {exc}"
+
     if creds is None:
         return None, "Could not obtain valid credentials. Please reconnect this account."
 
