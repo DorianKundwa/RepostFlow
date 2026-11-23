@@ -17,10 +17,29 @@ from wsgi import app
 from waitress import serve
 
 
+def free_port(port: int) -> None:
+    """Ensure target port is free by terminating any lingering or conflicting process."""
+    try:
+        import subprocess
+        cmd = (
+            f'powershell -NoProfile -ExecutionPolicy Bypass -Command '
+            f'"$conns = Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue; '
+            f'if ($conns) {{ foreach ($c in $conns) {{ '
+            f'Write-Host (\'  [!] Freeing port {port} from PID \' + $c.OwningProcess); '
+            f'Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue '
+            f'}} }}"'
+        )
+        subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
+    except Exception:
+        pass
+
+
 def main():
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", 5000))
     threads = int(os.environ.get("WAITRESS_THREADS", 8))
+
+    free_port(port)
 
     print("=" * 60)
     print("  RepostFlow Production Server (Windows / Waitress)")
