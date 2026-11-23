@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}Automation Rules · RepostFlow{% endblock %}
+{% block breadcrumb %}Automation Rules{% endblock %}
+
+{% block content %}
+<div class="rf-page-header">
+  <div>
+    <h2 class="rf-page-title"><i class="bi bi-robot me-2 text-rf-red"></i>Automation Rule Engine</h2>
+    <span class="text-muted small">Automatically distribute newly detected videos to multiple YouTube destination channels.</span>
+  </div>
+  <div class="rf-page-actions">
+    <button class="btn btn-rf-primary" data-bs-toggle="modal" data-bs-target="#createRuleModal">
+      <i class="bi bi-plus-circle me-1"></i>New Rule
+    </button>
+  </div>
+</div>
+
+<!-- ===== Rule Cards / Table ===== -->
+<div class="rf-panel mb-4">
+  <div class="rf-panel-header d-flex justify-content-between align-items-center">
+    <span>
+      <i class="bi bi-diagram-3-fill me-2 text-rf-red"></i>Active Distribution Rules
+      <span class="badge bg-secondary ms-2">{{ rules | length }}</span>
+    </span>
+  </div>
+  <div class="rf-panel-body p-0">
+    {% if rules %}
+    <div class="table-responsive">
+      <table class="table rf-table mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Rule Name</th>
+            <th>Source</th>
+            <th>Destinations</th>
+            <th>Modifications</th>
+            <th>Default Privacy</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rules %}
+          <tr>
+            <!-- Name -->
+            <td>
+              <div class="fw-semibold">{{ r.name }}</div>
+              <span class="text-muted small">Created {{ r.created_at.strftime('%d %b %Y') if r.created_at else '' }}</span>
+            </td>
+
+            <!-- Source -->
+            <td>
+              {% if r.source_type.value == 'youtube' %}
+                <span class="badge bg-danger-subtle text-danger"><i class="bi bi-youtube me-1"></i>YouTube</span>
+                <div class="small fw-semibold mt-1">
+                  {{ r.source_channel.channel_name if r.source_channel else 'Unassigned Channel' }}
+                </div>
+              {% else %}
+                <span class="badge bg-info-subtle text-info"><i class="bi bi-folder2-open me-1"></i>Watched Folder</span>
+                <div class="small fw-semibold mt-1">
+                  {{ r.source_folder.label if r.source_folder else 'Unassigned Folder' }}
+                </div>
+              {% endif %}
+            </td>
+
+            <!-- Destinations -->
+            <td>
+              <div class="d-flex flex-wrap gap-1" style="max-width: 250px;">
+                {% for d in r.destinations %}
+                  <span class="badge bg-dark border border-secondary text-light d-inline-flex align-items-center gap-1">
+                    {% if d.channel.thumbnail_url %}
+                    <img src="{{ d.channel.thumbnail_url }}" style="width:14px; height:14px; border-radius:50%;" />
+                    {% else %}
+                    <i class="bi bi-play-circle text-danger"></i>
+                    {% endif %}
+                    {{ d.channel.channel_name }}
+                  </span>
+                {% endfor %}
+              </div>
+            </td>
+
+            <!-- Modifications Preview -->
+            <td class="small text-muted">
+              {% if r.title_prefix or r.title_suffix %}
+                <div><i class="bi bi-type me-1"></i><code>{{ r.title_prefix or '' }}[Title]{{ r.title_suffix or '' }}</code></div>
+              {% endif %}
+              {% if r.extra_tags %}
+                <div><i class="bi bi-tags me-1"></i>Extra tags enabled</div>
+              {% endif %}
+              {% if not (r.title_prefix or r.title_suffix or r.extra_tags) %}
+                <span>Direct copy</span>
+              {% endif %}
+            </td>
+
+            <!-- Default Privacy -->
+            <td>
+              <span class="badge text-capitalize {% if r.default_privacy.value == 'public' %}bg-success-subtle text-success{% elif r.default_privacy.value == 'unlisted' %}bg-warning-subtle text-warning{% else %}bg-secondary-subtle text-secondary{% endif %}">
+                {{ r.default_privacy.value }}
+              </span>
+            </td>
+
+            <!-- Status Pill -->
+            <td>
+              <span class="rf-badge-status {{ 'rf-status-completed' if r.is_enabled else 'rf-status-paused' }}">
+                {{ 'Enabled' if r.is_enabled else 'Disabled' }}
+              </span>
+            </td>
+
+            <!-- Actions -->
+            <td class="text-end">
+              <div class="btn-group btn-group-sm">
+                <!-- Apply to Existing Videos -->
+                <form method="POST" action="{{ url_for('automation.apply_existing', rule_id=r.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <button type="submit" class="btn btn-outline-secondary" title="Queue uploads for existing matching videos in library">
+                    <i class="bi bi-play-fill text-success"></i> Run on Existing
+                  </button>
+                </form>
+
+                <!-- Toggle Status -->
+                <form method="POST" action="{{ url_for('automation.toggle', rule_id=r.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <button type="submit" class="btn btn-outline-secondary" title="{% if r.is_enabled %}Disable rule{% else %}Enable rule{% endif %}">
+                    <i class="bi {% if r.is_enabled %}bi-pause-fill{% else %}bi-arrow-clockwise{% endif %}"></i>
+                  </button>
+                </form>
+
+                <!-- Delete Rule -->
+                <form method="POST" action="{{ url_for('automation.delete', rule_id=r.id) }}" onsubmit="return confirm('Delete automation rule \'{{ r.name }}\'?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <button type="submit" class="btn btn-outline-danger" title="Delete rule">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="rf-empty-state py-5">
+      <i class="bi bi-robot fs-1 mb-3 text-rf-red"></i>
+      <h5>No automation rules configured</h5>
+      <p class="text-muted small mb-3">Create rules to link source YouTube channels or watched folders to destination channels.</p>
+      <button class="btn btn-rf-primary" data-bs-toggle="modal" data-bs-target="#createRuleModal">
+        <i class="bi bi-plus-circle me-1"></i>Create First Distribution Rule
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ===== Modal: Create Automation Rule ===== -->
+<div class="modal fade" id="createRuleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content rf-modal">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-robot text-rf-red me-2"></i>New Automation Rule</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('automation.create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <div class="modal-body">
+
+          <!-- Rule Name -->
+          <div class="mb-3">
+            <label class="form-label">Rule Name</label>
+            <input type="text" name="name" class="form-control" placeholder="e.g. Daily Clips Multi-Channel Distribution" required />
+          </div>
+
+          <!-- Source Type Radio -->
+          <div class="mb-3">
+            <label class="form-label">Workflow Source Type</label>
+            <div class="d-flex gap-4">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="source_type" id="srcTypeYT" value="youtube" checked onchange="toggleSourceSelectors()" />
+                <label class="form-check-label" for="srcTypeYT">
+                  <i class="bi bi-youtube text-danger me-1"></i>YouTube Channel (Workflow A)
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="source_type" id="srcTypeFolder" value="local_folder" onchange="toggleSourceSelectors()" />
+                <label class="form-check-label" for="srcTypeFolder">
+                  <i class="bi bi-folder2 text-info me-1"></i>Local Watched Folder (Workflow B)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Source Channel Selector -->
+          <div class="mb-3" id="sourceChannelContainer">
+            <label class="form-label">Select Source YouTube Channel</label>
+            <select name="source_channel_id" class="form-select" id="sourceChannelSelect">
+              <option value="">-- Choose Source Channel --</option>
+              {% for sc in source_channels %}
+              <option value="{{ sc.id }}">{{ sc.channel_name }} ({{ sc.channel_id }})</option>
+              {% endfor %}
+            </select>
+            {% if not source_channels %}
+            <div class="form-text text-warning"><i class="bi bi-exclamation-circle me-1"></i>No Source channels connected. Go to <a href="{{ url_for('channels.index') }}">Channels</a> to set a channel role to Source or Both.</div>
+            {% endif %}
+          </div>
+
+          <!-- Source Folder Selector -->
+          <div class="mb-3 d-none" id="sourceFolderContainer">
+            <label class="form-label">Select Source Monitored Folder</label>
+            <select name="source_folder_id" class="form-select" id="sourceFolderSelect">
+              <option value="">-- Choose Watched Folder --</option>
+              {% for wf in watched_folders %}
+              <option value="{{ wf.id }}">{{ wf.label }} ({{ wf.path }})</option>
+              {% endfor %}
+            </select>
+            {% if not watched_folders %}
+            <div class="form-text text-warning"><i class="bi bi-exclamation-circle me-1"></i>No watched folders configured. Go to <a href="{{ url_for('settings.index') }}">Settings</a> to add a folder.</div>
+            {% endif %}
+          </div>
+
+          <!-- Destination Channels Checkboxes -->
+          <div class="mb-4">
+            <label class="form-label d-flex justify-content-between align-items-center">
+              <span>Destination Channels (Publish targets)</span>
+              <span class="text-muted small">Select one or more</span>
+            </label>
+            <div class="border border-secondary-subtle rounded p-3 bg-dark-subtle" style="max-height: 180px; overflow-y: auto;">
+              {% if dest_channels %}
+                {% for dc in dest_channels %}
+                <div class="form-check mb-2">
+                  <input class="form-check-input dest-check" type="checkbox" name="dest_channel_ids" value="{{ dc.id }}" id="dest_{{ dc.id }}" />
+                  <label class="form-check-label d-flex align-items-center gap-2" for="dest_{{ dc.id }}">
+                    {% if dc.thumbnail_url %}
+                    <img src="{{ dc.thumbnail_url }}" style="width:20px; height:20px; border-radius:50%;" />
+                    {% else %}
+                    <i class="bi bi-person-circle"></i>
+                    {% endif %}
+                    <span>{{ dc.channel_name }}</span>
+                    <span class="badge bg-secondary-subtle text-secondary small">{{ dc.role.value }}</span>
+                  </label>
+                </div>
+                {% endfor %}
+              {% else %}
+                <div class="text-muted small">No Destination channels found. Connect YouTube channels with role 'Destination' or 'Both'.</div>
+              {% endif %}
+            </div>
+            <div class="form-text text-muted small"><i class="bi bi-shield-check me-1"></i>Infinite repost loops are strictly prevented: the source channel cannot be targeted as a destination.</div>
+          </div>
+
+          <!-- Metadata Options Accordion -->
+          <div class="accordion mb-3" id="metaAccordion">
+            <div class="accordion-item bg-dark border-secondary">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed bg-dark text-light border-0" type="button" data-bs-toggle="collapse" data-bs-target="#metaCollapse">
+                  <i class="bi bi-sliders me-2 text-rf-red"></i>Metadata Transformations &amp; Publishing Options
+                </button>
+              </h2>
+              <div id="metaCollapse" class="accordion-collapse collapse p-3">
+                <div class="row g-3">
+                  <!-- Title prefix & suffix -->
+                  <div class="col-md-6">
+                    <label class="form-label small">Title Prefix</label>
+                    <input type="text" name="title_prefix" class="form-control form-control-sm" placeholder="e.g. [REPOST] " />
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small">Title Suffix</label>
+                    <input type="text" name="title_suffix" class="form-control form-control-sm" placeholder="e.g. #Shorts" />
+                  </div>
+
+                  <!-- Description Prepend & Append -->
+                  <div class="col-12">
+                    <label class="form-label small">Description Prepend (header)</label>
+                    <textarea name="description_prepend" class="form-control form-control-sm" rows="2" placeholder="Text added above original description..."></textarea>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small">Description Append (footer)</label>
+                    <textarea name="description_append" class="form-control form-control-sm" rows="2" placeholder="Text added below original description (links, disclaimer)..."></textarea>
+                  </div>
+
+                  <!-- Extra Tags -->
+                  <div class="col-md-6">
+                    <label class="form-label small">Extra Tags (comma-separated)</label>
+                    <input type="text" name="extra_tags" class="form-control form-control-sm" placeholder="repost, clip, backup" />
+                  </div>
+
+                  <!-- Default Privacy -->
+                  <div class="col-md-6">
+                    <label class="form-label small">Default Privacy Setting</label>
+                    <select name="default_privacy" class="form-select form-select-sm">
+                      <option value="private" selected>Private (Recommended)</option>
+                      <option value="unlisted">Unlisted</option>
+                      <option value="public">Public</option>
+                    </select>
+                  </div>
+
+                  <!-- Copy toggles -->
+                  <div class="col-12">
+                    <label class="form-label small d-block">Inheritance Toggles</label>
+                    <div class="d-flex flex-wrap gap-3">
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="copy_title" value="1" id="cpTitle" checked />
+                        <label class="form-check-label small" for="cpTitle">Copy Title</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="copy_description" value="1" id="cpDesc" checked />
+                        <label class="form-check-label small" for="cpDesc">Copy Description</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="copy_tags" value="1" id="cpTags" checked />
+                        <label class="form-check-label small" for="cpTags">Copy Tags</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="copy_thumbnail" value="1" id="cpThumb" checked />
+                        <label class="form-check-label small" for="cpThumb">Copy Thumbnail</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Immediate apply checkbox -->
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="apply_existing" value="1" id="applyExistingCheck" />
+            <label class="form-check-label text-muted small" for="applyExistingCheck">
+              Immediately queue upload jobs for existing matching videos in library
+            </label>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-rf-primary"><i class="bi bi-check2-circle me-1"></i>Create Rule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSourceSelectors() {
+  const isYT = document.getElementById('srcTypeYT').checked;
+  const ytCont = document.getElementById('sourceChannelContainer');
+  const folderCont = document.getElementById('sourceFolderContainer');
+
+  if (isYT) {
+    ytCont.classList.remove('d-none');
+    folderCont.classList.add('d-none');
+  } else {
+    ytCont.classList.add('d-none');
+    folderCont.classList.remove('d-none');
+  }
+}
+</script>
+{% endblock %}
