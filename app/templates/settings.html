@@ -175,6 +175,102 @@
   </div>
 </div>
 
+<!-- ===== Full-Width: Background Scheduler & Automated Workers ===== -->
+<div class="row">
+  <div class="col-12">
+    <div class="rf-panel mb-4">
+      <div class="rf-panel-header d-flex justify-content-between align-items-center">
+        <span>
+          <i class="bi bi-clock-history me-2 text-rf-red"></i>Background Automation Engine (APScheduler)
+          {% if scheduler.is_running and not scheduler.is_paused %}
+            <span class="badge bg-success-subtle text-success ms-2"><i class="bi bi-circle-fill me-1 small"></i>Active</span>
+          {% elif scheduler.is_paused %}
+            <span class="badge bg-warning-subtle text-warning ms-2"><i class="bi bi-pause-circle-fill me-1 small"></i>Paused</span>
+          {% else %}
+            <span class="badge bg-secondary ms-2">Stopped</span>
+          {% endif %}
+        </span>
+        <form method="POST" action="{{ url_for('settings.toggle_scheduler') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          {% if scheduler.is_running and not scheduler.is_paused %}
+            <button type="submit" class="btn btn-sm btn-outline-warning">
+              <i class="bi bi-pause-fill me-1"></i>Pause Scheduler
+            </button>
+          {% else %}
+            <button type="submit" class="btn btn-sm btn-outline-success">
+              <i class="bi bi-play-fill me-1"></i>Resume Scheduler
+            </button>
+          {% endif %}
+        </form>
+      </div>
+      <div class="rf-panel-body p-0">
+        {% if scheduler.jobs %}
+        <div class="table-responsive">
+          <table class="table rf-table mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Job Name</th>
+                <th>Task Target</th>
+                <th>Trigger Interval</th>
+                <th>Next Scheduled Run</th>
+                <th>Status</th>
+                <th class="text-end">Immediate Dispatch</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for j in scheduler.jobs %}
+              <tr>
+                <td class="fw-semibold">
+                  {% if j.id == 'youtube_source_monitor' %}
+                    <i class="bi bi-youtube text-rf-red me-2"></i>{{ j.name }}
+                  {% elif j.id == 'upload_queue_worker' %}
+                    <i class="bi bi-cloud-upload-fill text-info me-2"></i>{{ j.name }}
+                  {% else %}
+                    <i class="bi bi-folder-check text-warning me-2"></i>{{ j.name }}
+                  {% endif %}
+                </td>
+                <td class="text-muted small">
+                  {% if j.id == 'youtube_source_monitor' %}
+                    Checks monitored source channels &amp; queues detected videos
+                  {% elif j.id == 'upload_queue_worker' %}
+                    Picks pending upload jobs within concurrency limits
+                  {% else %}
+                    Verifies folder integrity &amp; stability of watched directories
+                  {% endif %}
+                </td>
+                <td><code class="small text-muted">{{ j.trigger }}</code></td>
+                <td class="small">{{ j.next_run_time }}</td>
+                <td>
+                  {% if j.is_active and not scheduler.is_paused %}
+                    <span class="badge bg-success-subtle text-success">Active</span>
+                  {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary">Paused</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <form method="POST" action="{{ url_for('settings.run_scheduler_job_now', job_id=j.id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <button type="submit" class="btn btn-sm btn-rf-outline" title="Trigger immediate execution">
+                      <i class="bi bi-lightning-charge me-1"></i>Run Now
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="rf-empty-state py-4 text-center">
+          <i class="bi bi-clock-history fs-3 mb-2 text-muted"></i>
+          <p class="text-muted small mb-0">Scheduler daemon is initialized. Scheduled background tasks will appear here when active.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== Modal: Add Watched Folder ===== -->
 <div class="modal fade" id="addFolderModal" tabindex="-1">
   <div class="modal-dialog">

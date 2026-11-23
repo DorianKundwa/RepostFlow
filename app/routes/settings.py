@@ -1,13 +1,15 @@
 """
-app/routes/settings.py - Application and watched folder settings routes (Stage 4).
+app/routes/settings.py - Application and watched folder settings routes (Stage 4 & Stage 8).
 
 Endpoints:
-  GET  /settings/                 — Settings dashboard (General settings + Watched folders)
-  POST /settings/general          — Save general application preferences
+  GET  /settings/                 — Settings dashboard (General settings + Watched folders + Scheduler)
+  POST /settings/general          — Save general application preferences & reschedule jobs
   POST /settings/folders/add      — Register a new watched folder
   POST /settings/folders/<id>/toggle — Enable or disable a watched folder
   POST /settings/folders/<id>/rescan — Trigger manual rescan of a watched folder
   POST /settings/folders/<id>/delete — Remove a watched folder
+  POST /settings/scheduler/toggle — Pause or resume APScheduler background worker
+  POST /settings/scheduler/run-now/<job_id> — Manually trigger execution of a scheduled job
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from app.models import (
     Notification,
 )
 from app.services.folder_monitor import folder_monitor, rescan_folder
+from app.services.scheduler_service import scheduler_service
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +61,18 @@ def index():
     settings = {s.key: s for s in ApplicationSetting.query.order_by(ApplicationSetting.key).all()}
     folders = WatchedFolder.query.filter_by(user_id=current_user.id).order_by(WatchedFolder.added_at.desc()).all()
     ctx = _get_base_ctx()
+
+    scheduler_status = {
+        "is_running": scheduler_service.is_running(),
+        "is_paused": scheduler_service.is_paused(),
+        "jobs": scheduler_service.get_jobs_info(),
+    }
+
     return render_template(
         "settings.html",
         settings=settings,
         folders=folders,
+        scheduler=scheduler_status,
         **ctx,
     )
 
@@ -82,7 +93,39 @@ def update_general():
         if k in request.form:
             ApplicationSetting.set(k, request.form[k].strip())
 
+    # Reschedule background jobs with updated poll interval
+    scheduler_service.reschedule_jobs(current_app._get_current_object())
+
     flash("Application settings saved successfully.", "success")
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/scheduler/toggle", methods=["POST"])
+@login_required
+def toggle_scheduler():
+    if scheduler_service.is_paused():
+        scheduler_service.resume()
+        flash("Background scheduler resumed.", "success")
+    elif scheduler_service.is_running():
+        scheduler_service.pause()
+        flash("Background scheduler paused.", "info")
+    else:
+        # Scheduler not running at all, start it
+        scheduler_service.start(current_app._get_current_object())
+        flash("Background scheduler started.", "success")
+
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/scheduler/run-now/<job_id>", methods=["POST"])
+@login_required
+def run_scheduler_job_now(job_id: str):
+    success, msg = scheduler_service.run_job_now(job_id, current_app._get_current_object())
+    if success:
+        flash(f"Triggered background job '{job_id}'.", "success")
+    else:
+        flash(f"Could not trigger job '{job_id}': {msg}", "danger")
+
     return redirect(url_for("settings.index"))
 
 
