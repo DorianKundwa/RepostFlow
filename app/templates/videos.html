@@ -166,7 +166,7 @@
               <td>
               <a href="{{ url_for('videos.detail', video_id=v.id) }}" class="rf-video-table-thumb">
                 {% if v.local_thumbnail_path or v.thumbnail_url %}
-                <img src="{{ url_for('videos.thumbnail_preview', video_id=v.id) }}" alt="thumb" class="rounded" />
+                <img src="{{ url_for('videos.thumbnail_preview', video_id=v.id) }}?v={{ v.updated_at.timestamp() if v.updated_at else 0 }}" alt="thumb" class="rounded" />
                 {% else %}
                 <div class="rf-thumb-placeholder rounded"><i class="bi bi-play-circle"></i></div>
                 {% endif %}

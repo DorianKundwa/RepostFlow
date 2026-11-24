@@ -208,8 +208,8 @@
               Optimized for YouTube: <strong>1280x720</strong> (16:9), JPEG format under 2MB.
             </div>
 
+            <div id="thumbSpecsContainer" class="d-flex flex-wrap gap-2 mb-2">
             {% if thumb_info %}
-            <div class="d-flex flex-wrap gap-2 mb-2">
               <span class="badge bg-dark border border-secondary text-light">
                 <i class="bi bi-arrows-fullscreen me-1 text-info"></i>{{ thumb_info.width }} x {{ thumb_info.height }}
               </span>
@@ -221,8 +221,12 @@
                 <i class="bi bi-shield-check me-1"></i>YouTube Ready
               </span>
               {% endif %}
-            </div>
+            {% else %}
+              <span class="badge bg-secondary-subtle text-secondary">
+                <i class="bi bi-info-circle me-1"></i>No local file yet
+              </span>
             {% endif %}
+            </div>
 
             <!-- Dynamic Live Preview Info Box (Shown when file is selected) -->
             <div id="selectedThumbNotice" class="alert alert-warning py-2 px-2 small mb-0 d-none">
@@ -243,8 +247,7 @@
                      name="thumbnail_file"
                      id="thumbnailFileInput"
                      class="form-control"
-                     accept="image/jpeg,image/png,image/webp"
-                     required />
+                     accept="image/jpeg,image/png,image/webp" />
               <button type="submit" id="btnUploadThumb" class="btn btn-rf-primary">
                 <i class="bi bi-upload me-1"></i>Save &amp; Optimize
               </button>
@@ -253,15 +256,15 @@
               </button>
             </div>
             <div class="form-text text-muted small mt-1">
-              Select any image file. It will be instantly previewed above and automatically scaled and optimized to 1280x720 (16:9 JPEG) upon clicking Save.
+              Select any image file. It will be previewed instantly and automatically saved &amp; optimized to 1280x720 (16:9 JPEG) so it stays permanently.
             </div>
           </div>
 
           {% if video.local_file_path %}
           <div class="pt-2 border-top d-flex justify-content-between align-items-center">
             <span class="text-muted small">Or capture frame from linked video:</span>
-            <button type="submit"
-                    formaction="{{ url_for('videos.generate_thumbnail', video_id=video.id) }}"
+            <button type="button"
+                    id="btnCaptureFrame"
                     class="btn btn-sm btn-outline-secondary">
               <i class="bi bi-camera-video me-1"></i>Capture Frame at 1.0s
             </button>
@@ -356,7 +359,7 @@
         <i class="bi bi-pencil-square me-2 text-rf-red"></i>Edit Video Metadata
       </div>
       <div class="rf-panel-body">
-        <form method="POST" action="{{ url_for('videos.edit', video_id=video.id) }}">
+        <form id="metadataForm" method="POST" action="{{ url_for('videos.edit', video_id=video.id) }}" enctype="multipart/form-data">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
           <!-- Title -->
@@ -484,7 +487,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Thumbnail instant live preview
+  // Thumbnail instant live preview & auto-save
   const thumbInput = document.getElementById('thumbnailFileInput');
   const thumbImg = document.getElementById('thumbnailPreviewImg');
   const thumbBadge = document.getElementById('thumbnailBadge');
@@ -493,10 +496,109 @@ document.addEventListener('DOMContentLoaded', function() {
   const selectedDetails = document.getElementById('selectedThumbDetails');
   const btnRevert = document.getElementById('btnRevertThumb');
   const btnUpload = document.getElementById('btnUploadThumb');
+  const thumbForm = document.getElementById('thumbnailUploadForm');
+  const btnCapture = document.getElementById('btnCaptureFrame');
+  const specsContainer = document.getElementById('thumbSpecsContainer');
 
   // Store original src
-  const originalThumbSrc = thumbImg ? thumbImg.src : '';
-  const originalHadThumb = thumbImg && thumbImg.style.display !== 'none' && originalThumbSrc !== '';
+  let originalThumbSrc = thumbImg ? thumbImg.src : '';
+  let originalHadThumb = thumbImg && thumbImg.style.display !== 'none' && originalThumbSrc !== '';
+
+  function saveThumbnailAjax(file) {
+    if (!file) return;
+
+    if (btnUpload) {
+      btnUpload.disabled = true;
+      btnUpload.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Optimizing...';
+    }
+    if (thumbBadge) {
+      thumbBadge.style.display = 'inline-block';
+      thumbBadge.className = 'position-absolute bottom-0 start-0 m-1 badge bg-warning text-dark small border border-dark';
+      thumbBadge.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving &amp; Optimizing...';
+    }
+    if (selectedNotice && selectedDetails) {
+      selectedNotice.classList.remove('d-none');
+      selectedNotice.className = 'alert alert-info py-2 px-2 small mb-0';
+      selectedDetails.innerHTML = '<strong>' + file.name + '</strong> (' + (file.size / 1024).toFixed(1) + ' KB) — <span class="spinner-border spinner-border-sm me-1"></span>Processing 1280x720 optimization...';
+    }
+
+    const formData = new FormData();
+    formData.append('thumbnail_file', file);
+    formData.append('csrf_token', '{{ csrf_token() }}');
+
+    fetch('{{ url_for("videos.upload_thumbnail", video_id=video.id) }}', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (thumbImg) {
+          thumbImg.src = data.thumbnail_url;
+          thumbImg.style.display = 'block';
+        }
+        if (noThumbPlaceholder) noThumbPlaceholder.classList.add('d-none');
+        originalThumbSrc = data.thumbnail_url;
+        originalHadThumb = true;
+
+        if (thumbBadge) {
+          thumbBadge.className = 'position-absolute bottom-0 start-0 m-1 badge bg-success text-light small border border-secondary';
+          thumbBadge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Saved &amp; Applied';
+        }
+
+        if (selectedNotice && selectedDetails) {
+          selectedNotice.className = 'alert alert-success py-2 px-2 small mb-0';
+          const sz = data.specs && data.specs.size_kb ? data.specs.size_kb + ' KB' : '';
+          selectedDetails.innerHTML = '<i class="bi bi-check2-circle me-1"></i><strong>Saved permanently!</strong> Scaled and optimized to 1280x720 (16:9 JPEG' + (sz ? ', ' + sz : '') + ').';
+        }
+
+        if (specsContainer && data.specs && data.specs.width) {
+          specsContainer.innerHTML =
+            '<span class="badge bg-dark border border-secondary text-light">' +
+              '<i class="bi bi-arrows-fullscreen me-1 text-info"></i>' + data.specs.width + ' x ' + data.specs.height +
+            '</span> ' +
+            '<span class="badge bg-dark border border-secondary text-light">' +
+              '<i class="bi bi-file-earmark-image me-1 text-warning"></i>' + data.specs.size_kb + ' KB' +
+            '</span> ' +
+            '<span class="badge bg-success-subtle text-success">' +
+              '<i class="bi bi-shield-check me-1"></i>YouTube Ready' +
+            '</span>';
+        }
+
+        if (btnUpload) {
+          btnUpload.disabled = false;
+          btnUpload.className = 'btn btn-success';
+          btnUpload.innerHTML = '<i class="bi bi-check2 me-1"></i>Saved &amp; Optimized';
+        }
+        if (btnRevert) btnRevert.classList.add('d-none');
+
+        // Update video player poster if present
+        const player = document.querySelector('video');
+        if (player) player.poster = data.thumbnail_url;
+      } else {
+        throw new Error(data.error || 'Failed to update thumbnail.');
+      }
+    })
+    .catch(err => {
+      console.error('Thumbnail upload error:', err);
+      if (thumbBadge) {
+        thumbBadge.className = 'position-absolute bottom-0 start-0 m-1 badge bg-danger text-light small border border-secondary';
+        thumbBadge.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>Save Failed';
+      }
+      if (selectedNotice && selectedDetails) {
+        selectedNotice.className = 'alert alert-danger py-2 px-2 small mb-0';
+        selectedDetails.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i>' + err.message;
+      }
+      if (btnUpload) {
+        btnUpload.disabled = false;
+        btnUpload.className = 'btn btn-danger';
+        btnUpload.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Retry Save';
+      }
+    });
+  }
 
   if (thumbInput) {
     thumbInput.addEventListener('change', function() {
@@ -509,6 +611,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
+      // 1. Show instant client preview
       const objectUrl = URL.createObjectURL(file);
       if (thumbImg) {
         thumbImg.src = objectUrl;
@@ -517,30 +620,23 @@ document.addEventListener('DOMContentLoaded', function() {
       if (noThumbPlaceholder) {
         noThumbPlaceholder.classList.add('d-none');
       }
-      if (thumbBadge) {
-        thumbBadge.style.display = 'inline-block';
-        thumbBadge.className = 'position-absolute bottom-0 start-0 m-1 badge bg-warning text-dark small border border-dark';
-        thumbBadge.innerHTML = '<i class="bi bi-eye-fill me-1"></i>Selected Preview';
-      }
       if (btnRevert) {
         btnRevert.classList.remove('d-none');
       }
-      if (btnUpload) {
-        btnUpload.classList.add('btn-success');
-        btnUpload.classList.remove('btn-rf-primary');
-        btnUpload.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save &amp; Optimize';
-      }
 
-      const tempImg = new Image();
-      tempImg.onload = function() {
-        const sizeKb = (file.size / 1024).toFixed(1);
-        if (selectedNotice && selectedDetails) {
-          selectedNotice.classList.remove('d-none');
-          selectedDetails.innerHTML = '<strong>' + file.name + '</strong> (' + tempImg.naturalWidth + ' x ' + tempImg.naturalHeight + ' · ' + sizeKb + ' KB)<br><span class="text-success"><i class="bi bi-arrow-right-short"></i>Will be automatically scaled &amp; optimized to 1280x720 (16:9 JPEG) on save.</span>';
-        }
-      };
-      tempImg.src = objectUrl;
+      // 2. Automatically save & optimize to server immediately so it never gets lost!
+      saveThumbnailAjax(file);
     });
+
+    if (thumbForm) {
+      thumbForm.addEventListener('submit', function(e) {
+        const file = thumbInput.files && thumbInput.files[0];
+        if (file) {
+          e.preventDefault();
+          saveThumbnailAjax(file);
+        }
+      });
+    }
 
     if (btnRevert) {
       btnRevert.addEventListener('click', function() {
@@ -549,8 +645,8 @@ document.addEventListener('DOMContentLoaded', function() {
         btnRevert.classList.add('d-none');
 
         if (btnUpload) {
-          btnUpload.classList.remove('btn-success');
-          btnUpload.classList.add('btn-rf-primary');
+          btnUpload.disabled = false;
+          btnUpload.className = 'btn btn-rf-primary';
           btnUpload.innerHTML = '<i class="bi bi-upload me-1"></i>Save &amp; Optimize';
         }
 
@@ -572,6 +668,89 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       });
     }
+  }
+
+  // Frame Capture AJAX
+  if (btnCapture) {
+    btnCapture.addEventListener('click', function() {
+      btnCapture.disabled = true;
+      btnCapture.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Capturing...';
+
+      fetch('{{ url_for("videos.generate_thumbnail", video_id=video.id) }}', {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': '{{ csrf_token() }}'
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          if (thumbImg) {
+            thumbImg.src = data.thumbnail_url;
+            thumbImg.style.display = 'block';
+          }
+          if (noThumbPlaceholder) noThumbPlaceholder.classList.add('d-none');
+          originalThumbSrc = data.thumbnail_url;
+          originalHadThumb = true;
+
+          if (thumbBadge) {
+            thumbBadge.style.display = 'inline-block';
+            thumbBadge.className = 'position-absolute bottom-0 start-0 m-1 badge bg-success text-light small border border-secondary';
+            thumbBadge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Frame Captured &amp; Applied';
+          }
+
+          if (selectedNotice && selectedDetails) {
+            selectedNotice.classList.remove('d-none');
+            selectedNotice.className = 'alert alert-success py-2 px-2 small mb-0';
+            const sz = data.specs && data.specs.size_kb ? data.specs.size_kb + ' KB' : '';
+            selectedDetails.innerHTML = '<i class="bi bi-camera-video me-1"></i><strong>Frame captured and saved!</strong> Optimized to 1280x720 (16:9 JPEG' + (sz ? ', ' + sz : '') + ').';
+          }
+
+          if (specsContainer && data.specs && data.specs.width) {
+            specsContainer.innerHTML =
+              '<span class="badge bg-dark border border-secondary text-light">' +
+                '<i class="bi bi-arrows-fullscreen me-1 text-info"></i>' + data.specs.width + ' x ' + data.specs.height +
+              '</span> ' +
+              '<span class="badge bg-dark border border-secondary text-light">' +
+                '<i class="bi bi-file-earmark-image me-1 text-warning"></i>' + data.specs.size_kb + ' KB' +
+              '</span> ' +
+              '<span class="badge bg-success-subtle text-success">' +
+                '<i class="bi bi-shield-check me-1"></i>YouTube Ready' +
+              '</span>';
+          }
+
+          const player = document.querySelector('video');
+          if (player) player.poster = data.thumbnail_url;
+        } else {
+          alert('Could not capture frame: ' + (data.error || 'Unknown error'));
+        }
+      })
+      .catch(err => {
+        console.error('Frame capture error:', err);
+        alert('Frame capture failed: ' + err.message);
+      })
+      .finally(() => {
+        btnCapture.disabled = false;
+        btnCapture.innerHTML = '<i class="bi bi-camera-video me-1"></i>Capture Frame at 1.0s';
+      });
+    });
+  }
+
+  // Ensure metadata form also sends thumbnail if selected
+  const metaForm = document.getElementById('metadataForm');
+  if (metaForm && thumbInput) {
+    metaForm.addEventListener('submit', function(e) {
+      // If a file is selected and not yet attached to metaForm, append it
+      if (thumbInput.files && thumbInput.files.length > 0) {
+        // Input has no form attribute pointing elsewhere, or can be submitted
+        if (!metaForm.querySelector('input[type="file"][name="thumbnail_file"]')) {
+          const cloneInput = thumbInput.cloneNode();
+          cloneInput.style.display = 'none';
+          metaForm.appendChild(cloneInput);
+        }
+      }
+    });
   }
 });
 </script>

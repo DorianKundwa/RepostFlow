@@ -159,8 +159,8 @@
           {% for v in recent_videos %}
           <li class="rf-video-item">
             <div class="rf-video-thumb-placeholder">
-              {% if v.local_thumbnail_path %}
-              <img src="{{ v.local_thumbnail_path }}" alt="thumb" />
+              {% if v.local_thumbnail_path or v.thumbnail_url %}
+              <img src="{{ url_for('videos.thumbnail_preview', video_id=v.id) }}?v={{ v.updated_at.timestamp() if v.updated_at else 0 }}" alt="thumb" />
               {% else %}
               <i class="bi bi-play-circle"></i>
               {% endif %}

@@ -167,20 +167,25 @@ def detail(video_id: int):
 
     # Read current thumbnail file specs if present on disk
     thumb_info = None
-    if video.local_thumbnail_path and os.path.isfile(video.local_thumbnail_path):
-        try:
-            sz = os.path.getsize(video.local_thumbnail_path)
-            from PIL import Image
-            with Image.open(video.local_thumbnail_path) as im:
-                w, h = im.size
-                thumb_info = {
-                    "width": w,
-                    "height": h,
-                    "size_kb": round(sz / 1024, 1),
-                    "is_optimized": (w == 1280 and h == 720 and sz <= 2 * 1024 * 1024),
-                }
-        except Exception as exc:
-            logger.debug("Could not inspect thumbnail file: %s", exc)
+    if video.local_thumbnail_path:
+        t_path = Path(video.local_thumbnail_path)
+        if not t_path.is_absolute():
+            t_path = Path(current_app.config["BASE_DIR"]) / t_path
+        t_path = t_path.resolve()
+        if t_path.is_file():
+            try:
+                sz = t_path.stat().st_size
+                from PIL import Image
+                with Image.open(t_path) as im:
+                    w, h = im.size
+                    thumb_info = {
+                        "width": w,
+                        "height": h,
+                        "size_kb": round(sz / 1024, 1),
+                        "is_optimized": (w == 1280 and h == 720 and sz <= 2 * 1024 * 1024),
+                    }
+            except Exception as exc:
+                logger.debug("Could not inspect thumbnail file: %s", exc)
 
     return render_template(
         "video_detail.html",
@@ -216,6 +221,14 @@ def edit(video_id: int):
         privacy_status=privacy,
     )
 
+    # If a thumbnail file was included in this submission, process and persist it
+    thumb_file = request.files.get("thumbnail_file")
+    if thumb_file and thumb_file.filename:
+        thumb_ok, thumb_err = set_custom_thumbnail(video_id, thumb_file)
+        if not thumb_ok:
+            flash(f"Metadata updated, but thumbnail could not be saved: {thumb_err}", "warning")
+            return redirect(url_for("videos.detail", video_id=video_id))
+
     if ok:
         flash("Video metadata updated successfully.", "success")
     else:
@@ -228,14 +241,52 @@ def edit(video_id: int):
 @login_required
 def upload_thumbnail(video_id: int):
     file = request.files.get("thumbnail_file")
+    is_ajax = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("Accept", "")
+    )
     if not file or not file.filename:
+        if is_ajax:
+            return jsonify({"success": False, "error": "No image file was selected."}), 400
         flash("No image file was selected.", "warning")
         return redirect(url_for("videos.detail", video_id=video_id))
 
     ok, err = set_custom_thumbnail(video_id, file)
     if ok:
+        if is_ajax:
+            video = db.session.get(Video, video_id)
+            info = {}
+            if video and video.local_thumbnail_path:
+                t_path = Path(video.local_thumbnail_path)
+                if not t_path.is_absolute():
+                    t_path = Path(current_app.config["BASE_DIR"]) / t_path
+                t_path = t_path.resolve()
+                if t_path.is_file():
+                    try:
+                        sz = t_path.stat().st_size
+                        from PIL import Image
+                        with Image.open(t_path) as im:
+                            w, h = im.size
+                            info = {
+                                "width": w,
+                                "height": h,
+                                "size_kb": round(sz / 1024, 1),
+                                "is_optimized": (w == 1280 and h == 720 and sz <= 2 * 1024 * 1024),
+                            }
+                    except Exception:
+                        pass
+            ts = video.updated_at.timestamp() if video and video.updated_at else 0
+            thumb_url = url_for("videos.thumbnail_preview", video_id=video_id) + f"?v={ts}"
+            return jsonify({
+                "success": True,
+                "message": "Thumbnail updated and optimized.",
+                "thumbnail_url": thumb_url,
+                "specs": info,
+            })
         flash("Thumbnail updated and optimized.", "success")
     else:
+        if is_ajax:
+            return jsonify({"success": False, "error": err or "Could not update thumbnail."}), 400
         flash(f"Could not update thumbnail: {err}", "danger")
 
     return redirect(url_for("videos.detail", video_id=video_id))
@@ -245,11 +296,19 @@ def upload_thumbnail(video_id: int):
 @login_required
 def generate_thumbnail(video_id: int):
     video = db.session.get(Video, video_id)
+    is_ajax = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("Accept", "")
+    )
     if not video:
+        if is_ajax:
+            return jsonify({"success": False, "error": "Video not found."}), 404
         flash("Video not found.", "danger")
         return redirect(url_for("videos.index"))
 
     if not video.local_file_path or not os.path.isfile(video.local_file_path):
+        if is_ajax:
+            return jsonify({"success": False, "error": "Cannot generate thumbnail: Local master video file is not available."}), 400
         flash("Cannot generate thumbnail: Local master video file is not available.", "warning")
         return redirect(url_for("videos.detail", video_id=video_id))
 
@@ -266,8 +325,38 @@ def generate_thumbnail(video_id: int):
         video.local_thumbnail_path = thumb_path
         video.updated_at = datetime.now(timezone.utc)
         db.session.commit()
+        if is_ajax:
+            info = {}
+            t_path = Path(thumb_path)
+            if not t_path.is_absolute():
+                t_path = Path(current_app.config["BASE_DIR"]) / t_path
+            t_path = t_path.resolve()
+            if t_path.is_file():
+                try:
+                    sz = t_path.stat().st_size
+                    from PIL import Image
+                    with Image.open(t_path) as im:
+                        w, h = im.size
+                        info = {
+                            "width": w,
+                            "height": h,
+                            "size_kb": round(sz / 1024, 1),
+                            "is_optimized": (w == 1280 and h == 720 and sz <= 2 * 1024 * 1024),
+                        }
+                except Exception:
+                    pass
+            ts = video.updated_at.timestamp() if video.updated_at else 0
+            thumb_url = url_for("videos.thumbnail_preview", video_id=video_id) + f"?v={ts}"
+            return jsonify({
+                "success": True,
+                "message": "Thumbnail updated and optimized from video frame.",
+                "thumbnail_url": thumb_url,
+                "specs": info,
+            })
         flash("Thumbnail updated and optimized from video frame.", "success")
     else:
+        if is_ajax:
+            return jsonify({"success": False, "error": err or "Failed to generate thumbnail."}), 400
         flash(f"Failed to generate thumbnail: {err}", "danger")
 
     return redirect(url_for("videos.detail", video_id=video_id))
@@ -443,7 +532,10 @@ def thumbnail_preview(video_id: int):
         abort(404)
 
     if video.local_thumbnail_path:
-        t_path = Path(video.local_thumbnail_path).resolve()
+        t_path = Path(video.local_thumbnail_path)
+        if not t_path.is_absolute():
+            t_path = Path(current_app.config["BASE_DIR"]) / t_path
+        t_path = t_path.resolve()
         if t_path.is_file():
             response = send_file(t_path, mimetype="image/jpeg", max_age=0)
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"

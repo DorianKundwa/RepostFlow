@@ -186,8 +186,20 @@ def attach_local_media_to_video(
     video.fps = meta["fps"]
     video.codec = meta["codec"]
 
-    # Generate thumbnail if none exists or update existing
-    if not video.local_thumbnail_path or not os.path.isfile(video.local_thumbnail_path):
+    # Preserve existing local thumbnail if already present and valid on disk
+    has_valid_thumb = False
+    if video.local_thumbnail_path:
+        tp = Path(video.local_thumbnail_path)
+        if not tp.is_absolute():
+            try:
+                tp = Path(current_app.config["BASE_DIR"]) / tp
+            except Exception:
+                pass
+        if tp.is_file():
+            has_valid_thumb = True
+
+    # Generate thumbnail only if none exists
+    if not has_valid_thumb:
         unique_id = uuid.uuid4().hex[:12]
         thumb_dir = current_app.config["THUMBNAILS_DIR"]
         thumb_path, _ = generate_video_thumbnail(

@@ -456,6 +456,94 @@ class TestVideoRoutes:
                 reloaded = _db.session.get(Video, vid_id)
                 assert reloaded.local_thumbnail_path == "storage/thumbnails/gen_thumb.jpg"
 
+    def test_video_thumbnail_upload_ajax(self, auth_client, app, db):
+        with app.app_context():
+            v = Video.query.first()
+            vid_id = v.id
+
+        fake_img_bytes = io.BytesIO()
+        Image.new("RGB", (640, 360), color="green").save(fake_img_bytes, format="JPEG")
+        fake_img_bytes.seek(0)
+
+        with patch("app.services.thumbnail_service.optimize_thumbnail", return_value=(True, None)):
+            resp = auth_client.post(
+                f"/videos/{vid_id}/thumbnail",
+                data={"thumbnail_file": (fake_img_bytes, "ajax_thumb.jpg")},
+                content_type="multipart/form-data",
+                headers={"X-Requested-With": "XMLHttpRequest"},
+            )
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["success"] is True
+            assert "thumbnail_url" in data
+            assert f"/videos/{vid_id}/thumbnail-preview" in data["thumbnail_url"]
+
+    def test_video_edit_with_thumbnail_persists(self, auth_client, app, db):
+        with app.app_context():
+            v = Video.query.first()
+            vid_id = v.id
+
+        fake_img_bytes = io.BytesIO()
+        Image.new("RGB", (640, 360), color="purple").save(fake_img_bytes, format="JPEG")
+        fake_img_bytes.seek(0)
+
+        with patch("app.services.thumbnail_service.optimize_thumbnail", return_value=(True, None)):
+            resp = auth_client.post(
+                f"/videos/{vid_id}/edit",
+                data={
+                    "title": "Updated Title With Thumb",
+                    "description": "Desc",
+                    "tags": "tag1, tag2",
+                    "category_id": "22",
+                    "privacy_status": "private",
+                    "thumbnail_file": (fake_img_bytes, "edit_thumb.jpg"),
+                },
+                content_type="multipart/form-data",
+                follow_redirects=True,
+            )
+            assert resp.status_code == 200
+            with app.app_context():
+                reloaded = _db.session.get(Video, vid_id)
+                assert reloaded.title == "Updated Title With Thumb"
+                assert reloaded.local_thumbnail_path is not None
+
+    def test_attach_local_media_preserves_existing_thumbnail(self, app, db, tmp_path):
+        dummy_thumb = tmp_path / "existing_thumb.jpg"
+        dummy_thumb.write_bytes(b"existing thumbnail image")
+        dummy_video = tmp_path / "new_video.mp4"
+        dummy_video.write_bytes(b"dummy video")
+
+        with app.app_context():
+            v = Video(
+                source_type=SourceType.YOUTUBE,
+                title="Awaiting Video",
+                status=VideoStatus.AWAITING_FILE,
+                local_thumbnail_path=str(dummy_thumb),
+                detected_at=datetime.now(timezone.utc),
+            )
+            _db.session.add(v)
+            _db.session.commit()
+            vid_id = v.id
+
+        fake_meta = {
+            "duration_seconds": 30.0,
+            "width": 1920,
+            "height": 1080,
+            "fps": 30.0,
+            "codec": "h264",
+            "file_size_bytes": 1024,
+        }
+
+        with patch("app.services.video_service.validate_video_file", return_value=(True, None, fake_meta)), \
+             patch("app.services.video_service.generate_video_thumbnail") as mock_gen_thumb:
+            with app.app_context():
+                ok, err = video_service.attach_local_media_to_video(vid_id, str(dummy_video))
+                assert ok is True
+                # Should NOT call generate_video_thumbnail because existing thumb is valid
+                mock_gen_thumb.assert_not_called()
+                reloaded = _db.session.get(Video, vid_id)
+                assert reloaded.local_thumbnail_path == str(dummy_thumb)
+
     def test_video_delete_route(self, auth_client, app, db):
         with app.app_context():
             to_del = Video(
