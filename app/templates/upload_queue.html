@@ -120,8 +120,8 @@
           <button type="button" class="btn btn-sm btn-outline-secondary" onclick="submitBulkJobAction('pause')">
             <i class="bi bi-pause-fill me-1"></i>Pause Selected
           </button>
-          <button type="button" class="btn btn-sm btn-outline-danger" onclick="submitBulkJobAction('cancel')">
-            <i class="bi bi-x-circle me-1"></i>Cancel Selected
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="submitBulkJobAction('delete')">
+            <i class="bi bi-trash me-1"></i>Delete Selected
           </button>
         </div>
       </div>
@@ -341,13 +341,18 @@
 
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script>
 function submitBulkJobAction(action) {
   const checked = document.querySelectorAll('.job-row-check:checked');
   if (checked.length === 0) {
     alert('Please select at least one job first.');
     return;
+  }
+  if (action === 'delete') {
+    if (!confirm('Are you sure you want to permanently delete ' + checked.length + ' selected job(s) from the upload queue?')) {
+      return;
+    }
   }
   document.getElementById('bulkJobActionInput').value = action;
   document.getElementById('bulkJobForm').submit();

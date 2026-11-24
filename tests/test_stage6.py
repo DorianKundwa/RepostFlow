@@ -364,6 +364,51 @@ class TestAutomationRoutes:
         with app.app_context():
             assert _db.session.get(AutomationRule, r_id) is None
 
+    def test_get_rule_data_route(self, auth_client, app, db, user_id):
+        with app.app_context():
+            rule = AutomationRule.query.filter_by(user_id=user_id).first()
+            rule_id = rule.id
+
+        resp = auth_client.get(f"/automation/{rule_id}/data")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["success"] is True
+        assert data["rule"]["id"] == rule_id
+        assert data["rule"]["name"] == rule.name
+
+    def test_edit_rule_route(self, auth_client, app, db, user_id):
+        with app.app_context():
+            rule = AutomationRule.query.filter_by(user_id=user_id).first()
+            rule_id = rule.id
+            dest_ch = YouTubeChannel.query.filter_by(role=ChannelRole.DESTINATION).first()
+            dest_id = dest_ch.id
+
+        resp = auth_client.post(
+            f"/automation/{rule_id}/edit",
+            data={
+                "name": "Modified Rule Name",
+                "source_type": "local_folder",
+                "source_folder_id": "1",
+                "dest_channel_ids": [dest_id],
+                "title_prefix": "[MODIFIED] ",
+                "copy_title": "1",
+                "copy_description": "1",
+                "copy_tags": "1",
+                "copy_thumbnail": "1",
+                "default_privacy": "unlisted",
+                "prevent_duplicates": "1",
+            },
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert b"updated successfully" in resp.data
+
+        with app.app_context():
+            updated = _db.session.get(AutomationRule, rule_id)
+            assert updated.name == "Modified Rule Name"
+            assert updated.title_prefix == "[MODIFIED] "
+            assert updated.default_privacy == PrivacyStatus.UNLISTED
+
 
 # ------------------------------------------------------------------ #
 # 6. Duplicate Upload Prevention Tests                               #

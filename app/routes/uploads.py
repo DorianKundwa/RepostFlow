@@ -342,10 +342,17 @@ def bulk_action():
                 j.status = UploadStatus.FAILED
                 j.error_message = "Cancelled by user via bulk action"
                 count += 1
+    elif action == "delete":
+        for j in jobs:
+            db.session.delete(j)
+            count += 1
 
     try:
         db.session.commit()
-        flash(f"Updated {count} job(s) with action '{action}'.", "success")
+        if action == "delete":
+            flash(f"Permanently deleted {count} upload job(s) from the queue.", "success")
+        else:
+            flash(f"Updated {count} job(s) with action '{action}'.", "success")
     except Exception as exc:
         db.session.rollback()
         flash(f"Failed to perform bulk action: {exc}", "danger")

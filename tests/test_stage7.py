@@ -604,6 +604,38 @@ class TestUploadRoutes:
             assert _db.session.get(UploadJob, j1_id).status == UploadStatus.PAUSED
             assert _db.session.get(UploadJob, j2_id).status == UploadStatus.PAUSED
 
+    def test_bulk_action_delete_jobs(self, app, auth_client, fixture_data):
+        with app.app_context():
+            job1 = UploadJob(
+                video_id=fixture_data["video_id"],
+                destination_channel_id=fixture_data["channel_id"],
+                status=UploadStatus.PENDING,
+                upload_title="To Bulk Delete 1",
+                idempotency_key="del_job_1",
+            )
+            job2 = UploadJob(
+                video_id=fixture_data["video_id"],
+                destination_channel_id=fixture_data["channel_id"],
+                status=UploadStatus.FAILED,
+                upload_title="To Bulk Delete 2",
+                idempotency_key="del_job_2",
+            )
+            _db.session.add_all([job1, job2])
+            _db.session.commit()
+            j1_id, j2_id = job1.id, job2.id
+
+        resp = auth_client.post(
+            "/uploads/bulk-action",
+            data={"action": "delete", "job_ids": [str(j1_id), str(j2_id)]},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert b"Permanently deleted 2 upload job(s)" in resp.data
+
+        with app.app_context():
+            assert _db.session.get(UploadJob, j1_id) is None
+            assert _db.session.get(UploadJob, j2_id) is None
+
     def test_api_status_json(self, app, auth_client, fixture_data):
         with app.app_context():
             job = UploadJob(

@@ -115,6 +115,11 @@
             <!-- Actions -->
             <td class="text-end">
               <div class="btn-group btn-group-sm">
+                <!-- Edit Rule -->
+                <button type="button" class="btn btn-outline-primary btn-edit-rule" data-rule-id="{{ r.id }}" title="Edit / modify automation rule">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+
                 <!-- Apply to Existing Videos -->
                 <form method="POST" action="{{ url_for('automation.apply_existing', rule_id=r.id) }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -368,6 +373,217 @@
     </div>
   </div>
 </div>
+
+<!-- ===== Modal: Edit Automation Rule ===== -->
+<div class="modal fade" id="editRuleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content rf-modal">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square text-rf-red me-2"></i>Edit Automation Rule</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="editRuleForm" method="POST" action="">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <div class="modal-body">
+
+          <!-- Rule Name -->
+          <div class="mb-3">
+            <label class="form-label">Rule Name</label>
+            <input type="text" name="name" id="editRuleName" class="form-control" required />
+          </div>
+
+          <!-- Active/Enabled Toggle -->
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" name="is_enabled" value="1" id="editIsEnabledCheck" checked />
+            <label class="form-check-label" for="editIsEnabledCheck">Rule is Active / Enabled</label>
+          </div>
+
+          <!-- Source Type Radio -->
+          <div class="mb-3">
+            <label class="form-label">Workflow Source Type</label>
+            <div class="d-flex gap-4">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="source_type" id="editSrcTypeYT" value="youtube" onchange="toggleEditSourceSelectors()" />
+                <label class="form-check-label" for="editSrcTypeYT">
+                  <i class="bi bi-youtube text-danger me-1"></i>YouTube Channel (Workflow A)
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="source_type" id="editSrcTypeFolder" value="local_folder" onchange="toggleEditSourceSelectors()" />
+                <label class="form-check-label" for="editSrcTypeFolder">
+                  <i class="bi bi-folder2 text-info me-1"></i>Local Watched Folder (Workflow B)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Source Channel Selector -->
+          <div class="mb-3" id="editSourceChannelContainer">
+            <label class="form-label">Select Source YouTube Channel</label>
+            <select name="source_channel_id" class="form-select" id="editSourceChannelSelect">
+              <option value="">-- Choose Source Channel --</option>
+              {% for sc in source_channels %}
+              <option value="{{ sc.id }}">{{ sc.channel_name }} ({{ sc.channel_id }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Source Folder Selector -->
+          <div class="mb-3 d-none" id="editSourceFolderContainer">
+            <label class="form-label">Select Source Monitored Folder</label>
+            <select name="source_folder_id" class="form-select" id="editSourceFolderSelect">
+              <option value="">-- Choose Watched Folder --</option>
+              {% for wf in watched_folders %}
+              <option value="{{ wf.id }}">{{ wf.label }} ({{ wf.path }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Destination Channels Checkboxes -->
+          <div class="mb-4">
+            <label class="form-label d-flex justify-content-between align-items-center mb-1">
+              <span>Destination Channels (Publish targets)</span>
+              <div>
+                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none rf-link-red me-2" id="selectAllEditDestBtn">
+                  <i class="bi bi-check-all me-1"></i>Select All
+                </button>
+                <span class="text-muted small">|</span>
+                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none text-muted ms-2" id="deselectAllEditDestBtn">
+                  Deselect All
+                </button>
+              </div>
+            </label>
+            <div class="border border-secondary-subtle rounded p-3 bg-dark-subtle" style="max-height: 180px; overflow-y: auto;">
+              {% if dest_channels %}
+                {% for dc in dest_channels %}
+                <div class="form-check mb-2">
+                  <input class="form-check-input edit-dest-check" type="checkbox" name="dest_channel_ids" value="{{ dc.id }}" id="edit_dest_{{ dc.id }}" />
+                  <label class="form-check-label d-flex align-items-center gap-2" for="edit_dest_{{ dc.id }}">
+                    {% if dc.thumbnail_url %}
+                    <img src="{{ dc.thumbnail_url }}" style="width:20px; height:20px; border-radius:50%;" />
+                    {% else %}
+                    <i class="bi bi-play-circle text-danger"></i>
+                    {% endif %}
+                    <span>{{ dc.channel_name }}</span>
+                    <span class="badge bg-secondary-subtle text-secondary small">{{ dc.role.value }}</span>
+                  </label>
+                </div>
+                {% endfor %}
+              {% else %}
+                <div class="text-muted small">No Destination channels found.</div>
+              {% endif %}
+            </div>
+            <div class="form-text text-muted small"><i class="bi bi-shield-check me-1"></i>Infinite repost loops are strictly prevented: the source channel cannot be targeted as a destination.</div>
+          </div>
+
+          <!-- Metadata Options Accordion -->
+          <div class="accordion mb-3" id="editMetaAccordion">
+            <div class="accordion-item bg-dark border-secondary">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed bg-dark text-light border-0" type="button" data-bs-toggle="collapse" data-bs-target="#editMetaCollapse">
+                  <i class="bi bi-sliders me-2 text-rf-red"></i>Metadata Transformations &amp; Publishing Options
+                </button>
+              </h2>
+              <div id="editMetaCollapse" class="accordion-collapse collapse p-3">
+                <div class="row g-3">
+                  <!-- Title prefix & suffix -->
+                  <div class="col-md-6">
+                    <label class="form-label small">Title Prefix</label>
+                    <input type="text" name="title_prefix" id="editTitlePrefix" class="form-control form-control-sm" placeholder="e.g. [REPOST] " />
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small">Title Suffix</label>
+                    <input type="text" name="title_suffix" id="editTitleSuffix" class="form-control form-control-sm" placeholder="e.g. #Shorts" />
+                  </div>
+
+                  <!-- Description Prepend & Append -->
+                  <div class="col-12">
+                    <label class="form-label small">Description Prepend (header)</label>
+                    <textarea name="description_prepend" id="editDescPrepend" class="form-control form-control-sm" rows="2" placeholder="Text added above original description..."></textarea>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small">Description Append (footer)</label>
+                    <textarea name="description_append" id="editDescAppend" class="form-control form-control-sm" rows="2" placeholder="Text added below original description (links, disclaimer)..."></textarea>
+                  </div>
+
+                  <!-- Extra Tags -->
+                  <div class="col-md-6">
+                    <label class="form-label small">Extra Tags (comma-separated)</label>
+                    <input type="text" name="extra_tags" id="editExtraTags" class="form-control form-control-sm" placeholder="repost, clip, backup" />
+                  </div>
+
+                  <!-- Default Privacy -->
+                  <div class="col-md-6">
+                    <label class="form-label small">Default Privacy Setting</label>
+                    <select name="default_privacy" id="editDefaultPrivacy" class="form-select form-select-sm">
+                      <option value="private">Private (Recommended)</option>
+                      <option value="unlisted">Unlisted</option>
+                      <option value="public">Public</option>
+                    </select>
+                  </div>
+
+                  <!-- Copy toggles -->
+                  <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <label class="form-label small mb-0">Inheritance Toggles</label>
+                      <div class="small">
+                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none rf-link-red me-2" id="selectAllEditTogglesBtn">Select All</button>
+                        <span class="text-muted">|</span>
+                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none text-muted ms-2" id="deselectAllEditTogglesBtn">Deselect All</button>
+                      </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-3">
+                      <div class="form-check">
+                        <input class="form-check-input edit-toggle-check" type="checkbox" name="copy_title" value="1" id="editCpTitle" />
+                        <label class="form-check-label small" for="editCpTitle">Copy Title</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input edit-toggle-check" type="checkbox" name="copy_description" value="1" id="editCpDesc" />
+                        <label class="form-check-label small" for="editCpDesc">Copy Description</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input edit-toggle-check" type="checkbox" name="copy_tags" value="1" id="editCpTags" />
+                        <label class="form-check-label small" for="editCpTags">Copy Tags</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input edit-toggle-check" type="checkbox" name="copy_thumbnail" value="1" id="editCpThumb" />
+                        <label class="form-check-label small" for="editCpThumb">Copy Thumbnail</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Immediate apply checkbox -->
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="apply_existing" value="1" id="editApplyExistingCheck" />
+            <label class="form-check-label text-muted small" for="editApplyExistingCheck">
+              Immediately queue upload jobs for existing matching videos in library
+            </label>
+          </div>
+
+          <!-- Prevent Duplicates Checkbox -->
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="prevent_duplicates" value="1" id="editPreventDupesCheck" />
+            <label class="form-check-label text-light small fw-medium" for="editPreventDupesCheck">
+              <i class="bi bi-shield-check text-success me-1"></i>Prevent duplicate uploads to destination channels
+            </label>
+            <div class="form-text text-muted small ms-4">
+              Videos already published to a destination channel are automatically skipped to avoid duplicate re-uploads.
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-rf-primary"><i class="bi bi-save me-1"></i>Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -386,7 +602,22 @@ function toggleSourceSelectors() {
   }
 }
 
+function toggleEditSourceSelectors() {
+  const isYT = document.getElementById('editSrcTypeYT').checked;
+  const ytCont = document.getElementById('editSourceChannelContainer');
+  const folderCont = document.getElementById('editSourceFolderContainer');
+
+  if (isYT) {
+    ytCont.classList.remove('d-none');
+    folderCont.classList.add('d-none');
+  } else {
+    ytCont.classList.add('d-none');
+    folderCont.classList.remove('d-none');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+  // Destination Select All / Deselect All for Create Modal
   const selectAllDestBtn = document.getElementById('selectAllDestBtn');
   const deselectAllDestBtn = document.getElementById('deselectAllDestBtn');
   if (selectAllDestBtn && deselectAllDestBtn) {
@@ -398,6 +629,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Toggles Select All / Deselect All for Create Modal
   const selectAllTogglesBtn = document.getElementById('selectAllTogglesBtn');
   const deselectAllTogglesBtn = document.getElementById('deselectAllTogglesBtn');
   if (selectAllTogglesBtn && deselectAllTogglesBtn) {
@@ -408,6 +640,96 @@ document.addEventListener('DOMContentLoaded', function() {
       document.querySelectorAll('.toggle-check').forEach(function(c) { c.checked = false; });
     });
   }
+
+  // Destination Select All / Deselect All for Edit Modal
+  const selectAllEditDestBtn = document.getElementById('selectAllEditDestBtn');
+  const deselectAllEditDestBtn = document.getElementById('deselectAllEditDestBtn');
+  if (selectAllEditDestBtn && deselectAllEditDestBtn) {
+    selectAllEditDestBtn.addEventListener('click', function() {
+      document.querySelectorAll('.edit-dest-check').forEach(function(c) { c.checked = true; });
+    });
+    deselectAllEditDestBtn.addEventListener('click', function() {
+      document.querySelectorAll('.edit-dest-check').forEach(function(c) { c.checked = false; });
+    });
+  }
+
+  // Toggles Select All / Deselect All for Edit Modal
+  const selectAllEditTogglesBtn = document.getElementById('selectAllEditTogglesBtn');
+  const deselectAllEditTogglesBtn = document.getElementById('deselectAllEditTogglesBtn');
+  if (selectAllEditTogglesBtn && deselectAllEditTogglesBtn) {
+    selectAllEditTogglesBtn.addEventListener('click', function() {
+      document.querySelectorAll('.edit-toggle-check').forEach(function(c) { c.checked = true; });
+    });
+    deselectAllEditTogglesBtn.addEventListener('click', function() {
+      document.querySelectorAll('.edit-toggle-check').forEach(function(c) { c.checked = false; });
+    });
+  }
+
+  // Edit Automation Rule - Fetch & Populate Modal
+  document.querySelectorAll('.btn-edit-rule').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const ruleId = this.getAttribute('data-rule-id');
+      const form = document.getElementById('editRuleForm');
+      form.action = '/automation/' + ruleId + '/edit';
+
+      fetch('/automation/' + ruleId + '/data')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (!data.success) {
+            alert(data.error || 'Could not fetch rule details.');
+            return;
+          }
+          const r = data.rule;
+          document.getElementById('editRuleName').value = r.name || '';
+          document.getElementById('editIsEnabledCheck').checked = !!r.is_enabled;
+
+          if (r.source_type === 'youtube') {
+            document.getElementById('editSrcTypeYT').checked = true;
+            if (r.source_channel_id) {
+              document.getElementById('editSourceChannelSelect').value = r.source_channel_id;
+            }
+          } else {
+            document.getElementById('editSrcTypeFolder').checked = true;
+            if (r.source_folder_id) {
+              document.getElementById('editSourceFolderSelect').value = r.source_folder_id;
+            }
+          }
+          toggleEditSourceSelectors();
+
+          // Check destination checkboxes
+          const targetIds = r.destination_channel_ids || [];
+          document.querySelectorAll('.edit-dest-check').forEach(function(c) {
+            c.checked = targetIds.includes(parseInt(c.value, 10));
+          });
+
+          // Metadata transformations
+          document.getElementById('editTitlePrefix').value = r.title_prefix || '';
+          document.getElementById('editTitleSuffix').value = r.title_suffix || '';
+          document.getElementById('editDescPrepend').value = r.description_prepend || '';
+          document.getElementById('editDescAppend').value = r.description_append || '';
+          document.getElementById('editExtraTags').value = r.extra_tags || '';
+          document.getElementById('editDefaultPrivacy').value = r.default_privacy || 'private';
+
+          // Toggles
+          document.getElementById('editCpTitle').checked = !!r.copy_title;
+          document.getElementById('editCpDesc').checked = !!r.copy_description;
+          document.getElementById('editCpTags').checked = !!r.copy_tags;
+          document.getElementById('editCpThumb').checked = !!r.copy_thumbnail;
+
+          // Prevent duplicates
+          document.getElementById('editPreventDupesCheck').checked = r.prevent_duplicates !== false;
+
+          // Show modal
+          const modalEl = document.getElementById('editRuleModal');
+          const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+          modal.show();
+        })
+        .catch(function(err) {
+          console.error('Error loading rule:', err);
+          alert('Failed to load automation rule details.');
+        });
+    });
+  });
 });
 </script>
 {% endblock %}
