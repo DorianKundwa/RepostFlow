@@ -204,6 +204,8 @@ def run_job(job_id: int):
         success, err = execute_upload_job(job_id)
         if success:
             flash(f"Job #{job_id} uploaded successfully!", "success")
+        elif err and "Duplicate upload prevented" in err:
+            flash(f"Job #{job_id} skipped: {err}", "warning")
         else:
             flash(f"Job #{job_id} failed: {err}", "danger")
     else:

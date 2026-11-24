@@ -29,6 +29,7 @@ from googleapiclient.http import MediaFileUpload
 
 from app.extensions import db
 from app.models import (
+    ApplicationSetting,
     NotificationType,
     PrivacyStatus,
     PublishingHistory,
@@ -46,6 +47,99 @@ logger = logging.getLogger(__name__)
 
 # Resumable chunk size: 5MB (must be a multiple of 256KB per YouTube Data API specs)
 UPLOAD_CHUNK_SIZE = 5 * 1024 * 1024
+
+
+def is_duplicate_prevention_enabled() -> bool:
+    """Return whether duplicate upload prevention is globally active."""
+    val = ApplicationSetting.get("prevent_duplicate_uploads", "true")
+    if val is None:
+        return True
+    return str(val).strip().lower() in ("true", "1", "yes", "on")
+
+
+def check_duplicate_upload(
+    video: Video,
+    destination_channel_id: int,
+    target_title: Optional[str] = None,
+    exclude_job_id: Optional[int] = None,
+) -> Tuple[bool, Optional[str], Optional[PublishingHistory]]:
+    """
+    Check if a video has already been published to a specific destination YouTube channel.
+
+    Checks:
+      1. PublishingHistory records for destination_channel_id with upload_status == 'completed':
+         - Direct video ID match
+         - Original YouTube video ID match (if present)
+         - Title match (case-insensitive)
+      2. UploadJob records for destination_channel_id with status == COMPLETED:
+         - Direct video ID match
+
+    Returns:
+        (is_duplicate, reason_message, matched_history_or_None)
+    """
+    # 1. Check PublishingHistory by video_id
+    hist_by_video = PublishingHistory.query.filter(
+        PublishingHistory.destination_channel_id == destination_channel_id,
+        PublishingHistory.upload_status == "completed",
+        PublishingHistory.video_id == video.id,
+    )
+    if exclude_job_id:
+        hist_by_video = hist_by_video.filter(
+            (PublishingHistory.upload_job_id != exclude_job_id) | (PublishingHistory.upload_job_id.is_(None))
+        )
+    hist_direct = hist_by_video.order_by(PublishingHistory.uploaded_at.desc()).first()
+    if hist_direct:
+        time_str = hist_direct.uploaded_at.strftime('%Y-%m-%d %H:%M UTC') if hist_direct.uploaded_at else "previously"
+        yt_id_str = f" [YouTube ID: {hist_direct.destination_video_id}]" if hist_direct.destination_video_id else ""
+        return True, f"Video #{video.id} was already published to this channel on {time_str}{yt_id_str}", hist_direct
+
+    # 2. Check PublishingHistory by source YouTube video ID (if source was YouTube)
+    if video.youtube_video_id:
+        hist_by_yt = PublishingHistory.query.filter(
+            PublishingHistory.destination_channel_id == destination_channel_id,
+            PublishingHistory.upload_status == "completed",
+            PublishingHistory.destination_video_id == video.youtube_video_id,
+        )
+        if exclude_job_id:
+            hist_by_yt = hist_by_yt.filter(
+                (PublishingHistory.upload_job_id != exclude_job_id) | (PublishingHistory.upload_job_id.is_(None))
+            )
+        hist_yt = hist_by_yt.order_by(PublishingHistory.uploaded_at.desc()).first()
+        if hist_yt:
+            return True, f"Video with source YouTube ID {video.youtube_video_id} was already published to this channel", hist_yt
+
+    # 3. Check PublishingHistory by title
+    clean_title = (target_title or video.title or "").strip()
+    if clean_title and clean_title.lower() not in ("untitled video", "untitled"):
+        hist_by_title = PublishingHistory.query.filter(
+            PublishingHistory.destination_channel_id == destination_channel_id,
+            PublishingHistory.upload_status == "completed",
+            db.func.lower(PublishingHistory.video_title) == clean_title.lower(),
+        )
+        if exclude_job_id:
+            hist_by_title = hist_by_title.filter(
+                (PublishingHistory.upload_job_id != exclude_job_id) | (PublishingHistory.upload_job_id.is_(None))
+            )
+        hist_title = hist_by_title.order_by(PublishingHistory.uploaded_at.desc()).first()
+        if hist_title:
+            time_str = hist_title.uploaded_at.strftime('%Y-%m-%d %H:%M UTC') if hist_title.uploaded_at else "previously"
+            yt_id_str = f" [YouTube ID: {hist_title.destination_video_id}]" if hist_title.destination_video_id else ""
+            return True, f"Video with title '{hist_title.video_title}' was already published to this channel on {time_str}{yt_id_str}", hist_title
+
+    # 4. Check completed UploadJob
+    job_query = UploadJob.query.filter(
+        UploadJob.destination_channel_id == destination_channel_id,
+        UploadJob.video_id == video.id,
+        UploadJob.status == UploadStatus.COMPLETED,
+    )
+    if exclude_job_id:
+        job_query = job_query.filter(UploadJob.id != exclude_job_id)
+    completed_job = job_query.first()
+    if completed_job:
+        yt_id_str = f" [YouTube ID: {completed_job.destination_video_id}]" if completed_job.destination_video_id else ""
+        return True, f"UploadJob #{completed_job.id} already completed uploading this video to this channel{yt_id_str}", None
+
+    return False, None, None
 
 
 def execute_upload_job(job_id: int, app=None) -> Tuple[bool, Optional[str]]:
@@ -94,6 +188,37 @@ def execute_upload_job(job_id: int, app=None) -> Tuple[bool, Optional[str]]:
         job.error_message = "Destination channel is missing or inactive."
         db.session.commit()
         return False, job.error_message
+
+    # Duplicate upload guard check
+    rule_prevent = job.automation_rule.prevent_duplicates if job.automation_rule else True
+    if rule_prevent and is_duplicate_prevention_enabled():
+        is_dup, reason, matched_hist = check_duplicate_upload(
+            video=video,
+            destination_channel_id=dest_channel.id,
+            target_title=job.upload_title or video.title,
+            exclude_job_id=job.id,
+        )
+        if is_dup:
+            job.status = UploadStatus.COMPLETED
+            job.progress_percent = 100
+            job.completed_at = datetime.now(timezone.utc)
+            if matched_hist and matched_hist.destination_video_id:
+                job.destination_video_id = matched_hist.destination_video_id
+                job.destination_video_url = matched_hist.destination_video_url
+            job.error_message = f"Skipped: Duplicate upload prevented ({reason})."
+
+            # Check if all jobs for this video are completed
+            remaining_jobs = UploadJob.query.filter(
+                UploadJob.video_id == video.id,
+                UploadJob.id != job.id,
+                UploadJob.status.in_([UploadStatus.PENDING, UploadStatus.UPLOADING, UploadStatus.PROCESSING]),
+            ).count()
+            if remaining_jobs == 0:
+                video.status = VideoStatus.UPLOADED
+
+            db.session.commit()
+            logger.info("Upload job #%s skipped: duplicate upload prevented (%s)", job.id, reason)
+            return False, f"Duplicate upload prevented: {reason}"
 
     account = dest_channel.connected_account
     if not account or not account.is_active:

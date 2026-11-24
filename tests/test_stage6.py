@@ -363,3 +363,91 @@ class TestAutomationRoutes:
         assert b"Automation rule deleted" in resp.data
         with app.app_context():
             assert _db.session.get(AutomationRule, r_id) is None
+
+
+# ------------------------------------------------------------------ #
+# 6. Duplicate Upload Prevention Tests                               #
+# ------------------------------------------------------------------ #
+
+class TestDuplicateUploadPreventionInAutomation:
+    def test_duplicate_prevention_skips_published_video(self, app, db, user_id):
+        with app.app_context():
+            from app.models import PublishingHistory, ApplicationSetting
+            # Ensure global setting is true
+            ApplicationSetting.set("prevent_duplicate_uploads", "true")
+
+            # Create source folder and destination channel
+            src_f = WatchedFolder(user_id=user_id, path="/dupe/watch/dir", label="Dupe Watch")
+            dest_ch = YouTubeChannel.query.filter_by(channel_id="UC_dest_dupe_1").first()
+            if not dest_ch:
+                dest_ch = YouTubeChannel(
+                    connected_account_id=1,
+                    channel_id="UC_dest_dupe_1",
+                    channel_name="Dupe Dest Channel 1",
+                    role=ChannelRole.DESTINATION,
+                    is_active=True,
+                )
+                _db.session.add(dest_ch)
+            _db.session.add(src_f)
+            _db.session.commit()
+
+            # Create rule with prevent_duplicates=True
+            rule, _ = automation_service.create_or_update_rule(
+                user_id=user_id,
+                name="Dupe Guard Rule",
+                source_type=SourceType.LOCAL_FOLDER,
+                source_folder_id=src_f.id,
+                destination_channel_ids=[dest_ch.id],
+                prevent_duplicates=True,
+            )
+            assert rule.prevent_duplicates is True
+
+            # Create a video
+            vid = Video(
+                source_type=SourceType.LOCAL_FOLDER,
+                watched_folder_id=src_f.id,
+                original_filename="dupe_test.mp4",
+                title="Dupe Test Video",
+                status=VideoStatus.READY,
+            )
+            _db.session.add(vid)
+            _db.session.commit()
+
+            # Record in PublishingHistory that this video was already completed on dest_ch
+            pub = PublishingHistory(
+                video_id=vid.id,
+                destination_channel_id=dest_ch.id,
+                video_title="Dupe Test Video",
+                upload_status="completed",
+                destination_video_id="yt_already_there_123",
+            )
+            _db.session.add(pub)
+            _db.session.commit()
+
+            # Now evaluate rules for this video: should be skipped!
+            jobs = automation_service.evaluate_rules_for_video(vid)
+            assert len(jobs) == 0
+
+    def test_duplicate_allowed_when_rule_disables_prevention(self, app, db, user_id):
+        with app.app_context():
+            from app.models import PublishingHistory, ApplicationSetting
+            ApplicationSetting.set("prevent_duplicate_uploads", "true")
+
+            src_f = WatchedFolder.query.filter_by(path="/dupe/watch/dir").first()
+            dest_ch = YouTubeChannel.query.filter_by(channel_id="UC_dest_dupe_1").first()
+
+            # Update rule to allow duplicates
+            rule = AutomationRule.query.filter_by(name="Dupe Guard Rule").first()
+            rule.prevent_duplicates = False
+            _db.session.commit()
+
+            vid = Video.query.filter_by(original_filename="dupe_test.mp4").first()
+            # Clean any old upload jobs
+            UploadJob.query.filter_by(video_id=vid.id, destination_channel_id=dest_ch.id).delete()
+            _db.session.commit()
+
+            # Now evaluate: should queue job despite PublishingHistory!
+            jobs = automation_service.evaluate_rules_for_video(vid)
+            assert len(jobs) == 1
+            assert jobs[0].destination_channel_id == dest_ch.id
+

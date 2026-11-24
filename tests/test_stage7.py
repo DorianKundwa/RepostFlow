@@ -643,3 +643,52 @@ class TestUploadRoutes:
         assert data["id"] == job_id
         assert data["video_title"] == "API Detail Video"
         assert data["status"] == "pending"
+
+    def test_execute_upload_job_prevents_duplicate_upload(self, app, fixture_data):
+        with app.app_context():
+            from app.models import PublishingHistory, ApplicationSetting
+            ApplicationSetting.set("prevent_duplicate_uploads", "true")
+
+            job = UploadJob(
+                video_id=fixture_data["video_id"],
+                destination_channel_id=fixture_data["channel_id"],
+                status=UploadStatus.PENDING,
+                upload_title="Test Duplicate Prevention Execution",
+                idempotency_key="dupe_test_key",
+            )
+            _db.session.add(job)
+            _db.session.commit()
+            job_id = job.id
+
+            # Add completed PublishingHistory for this video on this channel
+            history = PublishingHistory(
+                video_id=fixture_data["video_id"],
+                destination_channel_id=fixture_data["channel_id"],
+                video_title="Test Duplicate Prevention Execution",
+                upload_status="completed",
+                destination_video_id="existing_yt_id_777",
+                destination_video_url="https://youtu.be/existing_yt_id_777",
+            )
+            _db.session.add(history)
+            _db.session.commit()
+
+        # Mock YouTube client to verify it is NEVER called
+        mock_service = MagicMock()
+
+        with patch("app.services.upload_service.get_youtube_client", return_value=(mock_service, None)):
+            with app.app_context():
+                success, err = upload_service.execute_upload_job(job_id)
+                # Should return False with duplicate prevented message
+                assert success is False
+                assert "Duplicate upload prevented" in err
+
+                # YouTube insert MUST NOT have been called
+                mock_service.videos().insert.assert_not_called()
+
+                # Job status must be COMPLETED (marked as skipped)
+                reloaded = _db.session.get(UploadJob, job_id)
+                assert reloaded.status == UploadStatus.COMPLETED
+                assert reloaded.progress_percent == 100
+                assert "Skipped: Duplicate upload prevented" in reloaded.error_message
+                assert reloaded.destination_video_id == "existing_yt_id_777"
+

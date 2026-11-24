@@ -76,6 +76,7 @@ def create_app(config_override=None) -> Flask:
     # ---------------------------------------------------------------- #
     with app.app_context():
         db.create_all()
+        _migrate_database_schema(app)
         _seed_default_settings(app)
 
     app.logger.info("RepostFlow started (env=%s)", os.environ.get("FLASK_ENV", "development"))
@@ -152,6 +153,23 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(oauth_bp, url_prefix="/oauth")
 
 
+
+def _migrate_database_schema(app: Flask) -> None:
+    """Safely apply lightweight schema migrations to existing SQLite tables if needed."""
+    try:
+        from sqlalchemy import text
+        with db.engine.connect() as conn:
+            # Check automation_rule columns
+            result = conn.execute(text("PRAGMA table_info(automation_rule);")).fetchall()
+            col_names = [row[1] for row in result]
+            if col_names and "prevent_duplicates" not in col_names:
+                conn.execute(text("ALTER TABLE automation_rule ADD COLUMN prevent_duplicates BOOLEAN NOT NULL DEFAULT 1;"))
+                conn.commit()
+                app.logger.info("Migrated schema: added prevent_duplicates column to automation_rule table.")
+    except Exception as exc:
+        app.logger.warning("Schema migration check notice: %s", exc)
+
+
 def _seed_default_settings(app: Flask) -> None:
     """
     Insert default ApplicationSetting rows on first run.
@@ -166,6 +184,7 @@ def _seed_default_settings(app: Flask) -> None:
         ("youtube_poll_interval", str(app.config.get("YOUTUBE_POLL_INTERVAL", 300)), "YouTube poll interval (seconds)", "int"),
         ("auto_copy_metadata", "true", "Automatically copy metadata when reposting", "bool"),
         ("auto_copy_thumbnail", "true", "Automatically copy thumbnail when reposting", "bool"),
+        ("prevent_duplicate_uploads", "true", "Prevent uploading the same video multiple times to the same destination channel", "bool"),
         ("max_upload_retries", "3", "Maximum upload retry attempts", "int"),
         ("log_level", app.config.get("LOG_LEVEL", "INFO"), "Logging level", "string"),
     ]

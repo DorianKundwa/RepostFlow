@@ -192,6 +192,82 @@
       </div>
     </div>
 
+    <!-- Destination Channels & Publishing Status -->
+    <div class="rf-panel mt-4 mb-4">
+      <div class="rf-panel-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-broadcast-pin me-2 text-rf-red"></i>Destinations &amp; Publishing Status</span>
+        <span class="badge bg-success-subtle text-success small"><i class="bi bi-shield-check me-1"></i>Duplicate Protection Active</span>
+      </div>
+      <div class="rf-panel-body p-0">
+        {% if publishing_statuses %}
+        <div class="table-responsive">
+          <table class="table rf-table mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Destination Channel</th>
+                <th>Status</th>
+                <th class="text-end">Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ps in publishing_statuses %}
+              <tr>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    {% if ps.channel.thumbnail_url %}
+                    <img src="{{ ps.channel.thumbnail_url }}" alt="avatar" class="rounded-circle" width="24" height="24">
+                    {% else %}
+                    <i class="bi bi-youtube text-danger"></i>
+                    {% endif %}
+                    <span class="fw-semibold">{{ ps.channel.channel_name }}</span>
+                  </div>
+                </td>
+                <td>
+                  {% if ps.is_published %}
+                    <span class="badge bg-success-subtle text-success">
+                      <i class="bi bi-check-circle-fill me-1"></i>Published
+                    </span>
+                    <span class="badge bg-secondary-subtle text-info ms-1" title="Protected from duplicate uploads">
+                      <i class="bi bi-shield-lock me-1"></i>Protected
+                    </span>
+                  {% elif ps.job %}
+                    <span class="badge bg-warning-subtle text-warning">
+                      <i class="bi bi-clock-history me-1"></i>{{ ps.job.status.value | capitalize }}
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary">
+                      Not Published
+                    </span>
+                  {% endif %}
+                </td>
+                <td class="text-end small">
+                  {% if ps.is_published and ps.history.destination_video_url %}
+                    <a href="{{ ps.history.destination_video_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-danger py-0 px-2">
+                      <i class="bi bi-box-arrow-up-right me-1"></i>View on YouTube
+                    </a>
+                  {% elif ps.is_published and ps.history.uploaded_at %}
+                    <span class="text-muted">{{ ps.history.uploaded_at.strftime('%d %b %H:%M') }}</span>
+                  {% elif ps.job %}
+                    <a href="{{ url_for('uploads.index', channel_id=ps.channel.id) }}" class="text-muted text-decoration-none">
+                      Job #{{ ps.job.id }}
+                    </a>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="p-3 text-muted small text-center">
+          <i class="bi bi-info-circle me-1"></i>No destination channels connected yet. Go to <a href="{{ url_for('channels.index') }}">Channels</a> to connect one.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
   </div>
 
   <!-- ===== Right Column: Metadata Editor ===== -->

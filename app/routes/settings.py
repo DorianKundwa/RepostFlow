@@ -88,10 +88,14 @@ def update_general():
         "youtube_poll_interval",
         "auto_copy_metadata",
         "auto_copy_thumbnail",
+        "prevent_duplicate_uploads",
         "max_upload_retries",
     ]
     for k in keys:
-        if k in request.form:
+        if k in ("auto_copy_metadata", "auto_copy_thumbnail", "prevent_duplicate_uploads"):
+            val = "true" if request.form.get(k) in ("true", "1", "on") else "false"
+            ApplicationSetting.set(k, val)
+        elif k in request.form:
             ApplicationSetting.set(k, request.form[k].strip())
 
     # Reschedule background jobs with updated poll interval

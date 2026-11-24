@@ -367,6 +367,7 @@ class AutomationRule(db.Model):
     default_privacy = db.Column(
         Enum(PrivacyStatus), default=PrivacyStatus.PRIVATE, nullable=False
     )
+    prevent_duplicates = db.Column(Boolean, default=True, nullable=False)
     # Timestamps
     created_at = db.Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = db.Column(

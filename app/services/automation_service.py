@@ -31,6 +31,7 @@ from app.models import (
     YouTubeChannel,
 )
 from app.services.notification_service import create_notification
+from app.services.upload_service import check_duplicate_upload, is_duplicate_prevention_enabled
 from app.services.video_service import parse_tags_to_json, parse_tags_to_list
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ def create_or_update_rule(
     description_append: Optional[str] = None,
     extra_tags: Optional[Any] = None,
     default_privacy: PrivacyStatus = PrivacyStatus.PRIVATE,
+    prevent_duplicates: bool = True,
     is_enabled: bool = True,
     rule_id: Optional[int] = None,
 ) -> Tuple[Optional[AutomationRule], Optional[str]]:
@@ -98,6 +100,7 @@ def create_or_update_rule(
             rule.description_append = description_append
             rule.extra_tags = tags_json
             rule.default_privacy = default_privacy
+            rule.prevent_duplicates = prevent_duplicates
             rule.is_enabled = is_enabled
             rule.updated_at = datetime.now(timezone.utc)
             # Clear old destinations
@@ -119,6 +122,7 @@ def create_or_update_rule(
                 description_append=description_append,
                 extra_tags=tags_json,
                 default_privacy=default_privacy,
+                prevent_duplicates=prevent_duplicates,
                 is_enabled=is_enabled,
             )
             db.session.add(rule)
@@ -261,6 +265,23 @@ def evaluate_rules_for_video(video: Video) -> List[UploadJob]:
                     video.id,
                 )
                 continue
+
+            # Duplicate prevention check: skip if video was already published to this destination channel
+            rule_prevent = getattr(rule, "prevent_duplicates", True)
+            if rule_prevent and is_duplicate_prevention_enabled():
+                is_dup, dup_reason, _ = check_duplicate_upload(
+                    video=video,
+                    destination_channel_id=dest.channel_id,
+                    target_title=meta_snapshot["title"],
+                )
+                if is_dup:
+                    logger.info(
+                        "Skipping destination channel %s for video %s: duplicate upload prevented (%s).",
+                        dest.channel_id,
+                        video.id,
+                        dup_reason,
+                    )
+                    continue
 
             # Idempotency check: does an upload job already exist for this video & destination?
             existing_job = UploadJob.query.filter_by(

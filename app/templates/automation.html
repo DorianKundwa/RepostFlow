@@ -103,6 +103,13 @@
               <span class="rf-badge-status {{ 'rf-status-completed' if r.is_enabled else 'rf-status-paused' }}">
                 {{ 'Enabled' if r.is_enabled else 'Disabled' }}
               </span>
+              {% if r.prevent_duplicates %}
+              <div class="mt-1">
+                <span class="badge bg-success-subtle text-success small" title="Duplicate uploads to destinations are prevented">
+                  <i class="bi bi-shield-check me-1"></i>No Duplicates
+                </span>
+              </div>
+              {% endif %}
             </td>
 
             <!-- Actions -->
@@ -334,11 +341,22 @@
           </div>
 
           <!-- Immediate apply checkbox -->
-          <div class="form-check">
+          <div class="form-check mb-2">
             <input class="form-check-input" type="checkbox" name="apply_existing" value="1" id="applyExistingCheck" />
             <label class="form-check-label text-muted small" for="applyExistingCheck">
               Immediately queue upload jobs for existing matching videos in library
             </label>
+          </div>
+
+          <!-- Prevent Duplicates Checkbox -->
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="prevent_duplicates" value="1" id="preventDupesCheck" checked />
+            <label class="form-check-label text-light small fw-medium" for="preventDupesCheck">
+              <i class="bi bi-shield-check text-success me-1"></i>Prevent duplicate uploads to destination channels
+            </label>
+            <div class="form-text text-muted small ms-4">
+              Videos already published to a destination channel are automatically skipped to avoid duplicate re-uploads.
+            </div>
           </div>
 
         </div>

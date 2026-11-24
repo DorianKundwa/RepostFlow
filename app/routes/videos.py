@@ -36,12 +36,16 @@ from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.models import (
+    ChannelRole,
+    ConnectedAccount,
+    Notification,
+    PrivacyStatus,
+    PublishingHistory,
+    SourceType,
+    UploadJob,
     Video,
     VideoStatus,
-    SourceType,
-    PrivacyStatus,
     YouTubeChannel,
-    Notification,
 )
 from app.services.video_service import (
     add_video_from_local_file,
@@ -122,11 +126,51 @@ def detail(video_id: int):
     tags_string = ", ".join(tags_list)
     ctx = _get_base_ctx()
 
+    # Query destination channels and publishing history to show duplicate status
+    dest_channels = (
+        YouTubeChannel.query
+        .join(ConnectedAccount)
+        .filter(
+            ConnectedAccount.user_id == current_user.id,
+            YouTubeChannel.is_active == True,
+            YouTubeChannel.role.in_([ChannelRole.DESTINATION, ChannelRole.BOTH]),
+        )
+        .order_by(YouTubeChannel.channel_name)
+        .all()
+    )
+
+    publishing_statuses = []
+    for dc in dest_channels:
+        history = (
+            PublishingHistory.query.filter_by(
+                video_id=video.id,
+                destination_channel_id=dc.id,
+                upload_status="completed",
+            )
+            .order_by(PublishingHistory.uploaded_at.desc())
+            .first()
+        )
+        latest_job = (
+            UploadJob.query.filter_by(
+                video_id=video.id,
+                destination_channel_id=dc.id,
+            )
+            .order_by(UploadJob.created_at.desc())
+            .first()
+        )
+        publishing_statuses.append({
+            "channel": dc,
+            "history": history,
+            "job": latest_job,
+            "is_published": history is not None,
+        })
+
     return render_template(
         "video_detail.html",
         video=video,
         tags_list=tags_list,
         tags_string=tags_string,
+        publishing_statuses=publishing_statuses,
         **ctx,
     )
 

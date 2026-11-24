@@ -212,9 +212,15 @@
             <!-- Status Badge -->
             <td>
               {% if j.status.value == 'completed' %}
-                <span id="job-status-badge-{{ j.id }}" class="badge bg-success-subtle text-success">
-                  <i class="bi bi-check-circle me-1"></i>Completed
-                </span>
+                {% if j.error_message and 'Duplicate' in j.error_message %}
+                  <span id="job-status-badge-{{ j.id }}" class="badge bg-secondary-subtle text-info border border-info" title="{{ j.error_message }}">
+                    <i class="bi bi-shield-check me-1"></i>Skipped (Duplicate)
+                  </span>
+                {% else %}
+                  <span id="job-status-badge-{{ j.id }}" class="badge bg-success-subtle text-success">
+                    <i class="bi bi-check-circle me-1"></i>Completed
+                  </span>
+                {% endif %}
               {% elif j.status.value == 'uploading' %}
                 <span id="job-status-badge-{{ j.id }}" class="badge bg-info-subtle text-info">
                   <span class="spinner-border spinner-border-sm me-1" role="status"></span>Uploading

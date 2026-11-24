@@ -93,6 +93,7 @@ class BaseConfig:
     MAX_CONCURRENT_UPLOADS: int = int(os.environ.get("MAX_CONCURRENT_UPLOADS", 2))
     DEFAULT_PRIVACY: str = os.environ.get("DEFAULT_PRIVACY", "private")
     MAX_UPLOAD_RETRIES: int = int(os.environ.get("MAX_UPLOAD_RETRIES", 3))
+    PREVENT_DUPLICATE_UPLOADS: bool = os.environ.get("PREVENT_DUPLICATE_UPLOADS", "true").lower() in ("true", "1", "yes")
 
     # ------------------------------------------------------------------ #
     # Scheduler / Monitoring                                               #

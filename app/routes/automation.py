@@ -128,6 +128,7 @@ def create():
     copy_description = request.form.get("copy_description") == "1"
     copy_tags = request.form.get("copy_tags") == "1"
     copy_thumbnail = request.form.get("copy_thumbnail") == "1"
+    prevent_duplicates = request.form.get("prevent_duplicates", "1") in ("1", "true", "on")
 
     privacy_str = request.form.get("default_privacy", "private").strip().lower()
     try:
@@ -154,6 +155,7 @@ def create():
         description_append=description_append,
         extra_tags=extra_tags,
         default_privacy=privacy,
+        prevent_duplicates=prevent_duplicates,
         is_enabled=True,
     )
 
