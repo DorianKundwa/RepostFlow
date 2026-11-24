@@ -60,10 +60,11 @@ class BaseConfig:
     )
     # Publishing status on Google Cloud Console: "production" (permanent tokens) or "testing" (7-day tokens)
     GOOGLE_OAUTH_STATUS: str = os.environ.get("GOOGLE_OAUTH_STATUS", "production")
-    # Scopes requested during OAuth. Least privilege: only what is needed.
+    # Scopes requested during OAuth.
     YOUTUBE_SCOPES: list = [
         "https://www.googleapis.com/auth/youtube.readonly",   # read channel/video data
         "https://www.googleapis.com/auth/youtube.upload",     # upload videos
+        "https://www.googleapis.com/auth/youtube.force-ssl",  # manage video metadata & thumbnails
         "openid",
         "https://www.googleapis.com/auth/userinfo.email",
         "https://www.googleapis.com/auth/userinfo.profile",

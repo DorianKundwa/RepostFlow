@@ -724,3 +724,56 @@ class TestUploadRoutes:
                 assert "Skipped: Duplicate upload prevented" in reloaded.error_message
                 assert reloaded.destination_video_id == "existing_yt_id_777"
 
+    def test_execute_upload_job_concurrent_execution_blocked(self, app, fixture_data):
+        with app.app_context():
+            job = UploadJob(
+                video_id=fixture_data["video_id"],
+                destination_channel_id=fixture_data["channel_id"],
+                status=UploadStatus.PENDING,
+                upload_title="Concurrency Test Video",
+                idempotency_key="concurrency_key_1",
+            )
+            _db.session.add(job)
+            _db.session.commit()
+            job_id = job.id
+
+            from app.services.upload_service import _active_job_ids
+
+            # Simulate another thread already executing this job
+            _active_job_ids.add(job_id)
+            try:
+                success, err = upload_service.execute_upload_job(job_id)
+                assert success is False
+                assert "already in progress" in err.lower()
+            finally:
+                _active_job_ids.discard(job_id)
+
+    def test_thumbnail_upload_with_retry_on_404(self, tmp_path):
+        from app.services.upload_service import upload_video_thumbnail_with_retry
+        from googleapiclient.errors import HttpError
+        from unittest.mock import MagicMock
+
+        dummy_thumb = tmp_path / "test_thumb.jpg"
+        dummy_thumb.write_bytes(b"dummy image data")
+
+        mock_service = MagicMock()
+        mock_resp_404 = MagicMock()
+        mock_resp_404.status = 404
+        err_404 = HttpError(resp=mock_resp_404, content=b'{"error": {"message": "videoNotFound"}}')
+
+        mock_set = MagicMock()
+        # Fail on attempt 1 with 404, succeed on attempt 2
+        mock_set.execute.side_effect = [err_404, {"url": "https://img.youtube.com/thumb_set.jpg"}]
+        mock_service.thumbnails().set.return_value = mock_set
+
+        ok, err = upload_video_thumbnail_with_retry(
+            service=mock_service,
+            video_id="test_yt_vid_123",
+            thumbnail_path=str(dummy_thumb),
+            max_retries=3,
+            initial_delay=0.01,
+        )
+        assert ok is True
+        assert err is None
+        assert mock_set.execute.call_count == 2
+

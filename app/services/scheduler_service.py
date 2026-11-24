@@ -271,26 +271,33 @@ class SchedulerService:
                 logger.debug("Upload queue: maximum concurrent uploads reached (%d active).", active_count)
                 return
 
-            # Fetch next pending jobs
+            from app.services.upload_service import _active_job_ids, execute_upload_job
+
+            # Fetch next pending jobs, excluding any currently executing in an active thread
             pending_jobs = (
                 UploadJob.query.filter(UploadJob.status == UploadStatus.PENDING)
                 .order_by(UploadJob.created_at.asc())
-                .limit(available_slots)
+                .limit(available_slots * 2)
                 .all()
             )
 
-            if not pending_jobs:
+            jobs_to_start = []
+            for j in pending_jobs:
+                if j.id not in _active_job_ids:
+                    jobs_to_start.append(j)
+                    if len(jobs_to_start) >= available_slots:
+                        break
+
+            if not jobs_to_start:
                 return
 
             logger.info(
                 "Upload queue worker found %d pending job(s) for %d available slot(s).",
-                len(pending_jobs),
+                len(jobs_to_start),
                 available_slots,
             )
 
-            from app.services.upload_service import execute_upload_job
-
-            for job in pending_jobs:
+            for job in jobs_to_start:
                 job_id = job.id
                 def _worker(jid=job_id):
                     with app.app_context():
