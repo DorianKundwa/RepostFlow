@@ -255,8 +255,12 @@ class FolderMonitorManager:
             del self._watches[folder_id]
 
         p = Path(folder_path)
-        if not p.is_dir():
-            logger.warning("Watched folder directory does not exist: %s", folder_path)
+        try:
+            if not p.is_dir():
+                logger.warning("Watched folder directory does not exist: %s", folder_path)
+                return False
+        except (PermissionError, OSError) as exc:
+            logger.warning("Watched folder directory inaccessible (%s): %s", exc, folder_path)
             return False
 
         handler = VideoFolderEventHandler(self.app, folder_id, allowed_exts)

@@ -165,12 +165,30 @@ def detail(video_id: int):
             "is_published": history is not None,
         })
 
+    # Read current thumbnail file specs if present on disk
+    thumb_info = None
+    if video.local_thumbnail_path and os.path.isfile(video.local_thumbnail_path):
+        try:
+            sz = os.path.getsize(video.local_thumbnail_path)
+            from PIL import Image
+            with Image.open(video.local_thumbnail_path) as im:
+                w, h = im.size
+                thumb_info = {
+                    "width": w,
+                    "height": h,
+                    "size_kb": round(sz / 1024, 1),
+                    "is_optimized": (w == 1280 and h == 720 and sz <= 2 * 1024 * 1024),
+                }
+        except Exception as exc:
+            logger.debug("Could not inspect thumbnail file: %s", exc)
+
     return render_template(
         "video_detail.html",
         video=video,
         tags_list=tags_list,
         tags_string=tags_string,
         publishing_statuses=publishing_statuses,
+        thumb_info=thumb_info,
         **ctx,
     )
 
@@ -219,6 +237,38 @@ def upload_thumbnail(video_id: int):
         flash("Thumbnail updated and optimized.", "success")
     else:
         flash(f"Could not update thumbnail: {err}", "danger")
+
+    return redirect(url_for("videos.detail", video_id=video_id))
+
+
+@videos_bp.route("/<int:video_id>/generate-thumbnail", methods=["POST"])
+@login_required
+def generate_thumbnail(video_id: int):
+    video = db.session.get(Video, video_id)
+    if not video:
+        flash("Video not found.", "danger")
+        return redirect(url_for("videos.index"))
+
+    if not video.local_file_path or not os.path.isfile(video.local_file_path):
+        flash("Cannot generate thumbnail: Local master video file is not available.", "warning")
+        return redirect(url_for("videos.detail", video_id=video_id))
+
+    from app.services.thumbnail_service import generate_video_thumbnail
+    from datetime import datetime, timezone
+    thumb_dir = current_app.config["THUMBNAILS_DIR"]
+    thumb_path, err = generate_video_thumbnail(
+        video.local_file_path,
+        str(thumb_dir),
+        identifier=str(video.id),
+        timestamp_seconds=1.0,
+    )
+    if thumb_path:
+        video.local_thumbnail_path = thumb_path
+        video.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        flash("Thumbnail updated and optimized from video frame.", "success")
+    else:
+        flash(f"Failed to generate thumbnail: {err}", "danger")
 
     return redirect(url_for("videos.detail", video_id=video_id))
 
@@ -395,7 +445,11 @@ def thumbnail_preview(video_id: int):
     if video.local_thumbnail_path:
         t_path = Path(video.local_thumbnail_path).resolve()
         if t_path.is_file():
-            return send_file(t_path, mimetype="image/jpeg")
+            response = send_file(t_path, mimetype="image/jpeg", max_age=0)
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
 
     # If local thumbnail is missing, redirect to remote YouTube thumbnail or return 404
     if video.thumbnail_url:

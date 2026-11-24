@@ -428,6 +428,34 @@ class TestVideoRoutes:
             assert resp.status_code == 200
             assert b"Thumbnail updated and optimized" in resp.data
 
+    def test_video_generate_thumbnail_route(self, auth_client, app, db, tmp_path):
+        dummy_video = tmp_path / "vid_gen_thumb.mp4"
+        dummy_video.write_bytes(b"dummy video content")
+
+        with app.app_context():
+            v = Video(
+                source_type=SourceType.LOCAL_FOLDER,
+                title="Thumb Gen Video",
+                local_file_path=str(dummy_video),
+                status=VideoStatus.READY,
+                detected_at=datetime.now(timezone.utc),
+            )
+            _db.session.add(v)
+            _db.session.commit()
+            vid_id = v.id
+
+        with patch("app.services.thumbnail_service.generate_video_thumbnail", return_value=("storage/thumbnails/gen_thumb.jpg", None)):
+            resp = auth_client.post(
+                f"/videos/{vid_id}/generate-thumbnail",
+                follow_redirects=True,
+            )
+            assert resp.status_code == 200
+            assert b"Thumbnail updated and optimized from video frame" in resp.data
+
+            with app.app_context():
+                reloaded = _db.session.get(Video, vid_id)
+                assert reloaded.local_thumbnail_path == "storage/thumbnails/gen_thumb.jpg"
+
     def test_video_delete_route(self, auth_client, app, db):
         with app.app_context():
             to_del = Video(
